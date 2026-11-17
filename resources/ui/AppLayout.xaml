@@ -1,0 +1,1017 @@
+<Grid
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Light"
+    Background="#FFFFFF">
+
+    <Grid.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#6D28D9" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#6D28D9" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#5B21B6" />
+                    <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#4C1D95" />
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="#A1A1AA" />
+                    <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#52525B" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- Custom Animated Purple ToggleSwitch Style -->
+            <Style TargetType="ToggleSwitch">
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="MinWidth" Value="40" />
+                <Setter Property="Width" Value="40" />
+                <Setter Property="ManipulationMode" Value="System,TranslateX" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleSwitch">
+                            <Grid Background="Transparent" Height="26" Width="40">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.12" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleX" To="1.10" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleY" To="1.10" Duration="0:0:0.12" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleX" To="0.90" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="KnobScale" Storyboard.TargetProperty="ScaleY" To="0.90" Duration="0:0:0.06" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="SwitchAreaGrid" Storyboard.TargetProperty="Opacity" To="0.45" Duration="0" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="ToggleStates">
+                                        <VisualState x:Name="Dragging" />
+                                        <VisualState x:Name="Off">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="KnobTranslateTransform" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.18">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                                <DoubleAnimation Storyboard.TargetName="SwitchKnobBounds" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.16" />
+                                                <DoubleAnimation Storyboard.TargetName="SwitchKnobOn" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="SwitchKnobOff" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.14" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="On">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="KnobTranslateTransform" Storyboard.TargetProperty="X" To="18" Duration="0:0:0.18">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                                <DoubleAnimation Storyboard.TargetName="SwitchKnobBounds" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.16" />
+                                                <DoubleAnimation Storyboard.TargetName="SwitchKnobOn" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="SwitchKnobOff" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.14" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+
+                                <Grid x:Name="SwitchAreaGrid" Width="40" Height="22" VerticalAlignment="Center" Control.IsTemplateFocusTarget="True" Background="Transparent">
+                                    <Rectangle x:Name="OuterBorder"
+                                               Width="40" Height="22"
+                                               RadiusX="11" RadiusY="11"
+                                               Fill="#E4E4E7"
+                                               Stroke="#D4D4D8"
+                                               StrokeThickness="1" />
+                                    <Rectangle x:Name="SwitchKnobBounds"
+                                               Width="40" Height="22"
+                                               RadiusX="11" RadiusY="11"
+                                               Fill="#6D28D9"
+                                               Opacity="0" />
+                                    <Grid x:Name="SwitchKnob"
+                                          Width="22" Height="22"
+                                          HorizontalAlignment="Left">
+                                        <Grid.RenderTransform>
+                                            <TranslateTransform x:Name="KnobTranslateTransform" />
+                                        </Grid.RenderTransform>
+                                        <Grid Width="16" Height="16" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Grid.RenderTransform>
+                                                <ScaleTransform x:Name="KnobScale" />
+                                            </Grid.RenderTransform>
+                                            <Ellipse x:Name="SwitchKnobOff" Fill="#52525B" Width="14" Height="14" />
+                                            <Ellipse x:Name="SwitchKnobOn" Fill="#FFFFFF" Width="16" Height="16" Opacity="0" />
+                                        </Grid>
+                                    </Grid>
+                                    <Thumb x:Name="SwitchThumb" Width="40" Height="22">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Rectangle Fill="Transparent" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Primary Purple Action Button (Animated Hover & Press) -->
+            <Style x:Key="PrimaryPurgeButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="#6D28D9" />
+                <Setter Property="Foreground" Value="#FFFFFF" />
+                <Setter Property="BorderBrush" Value="#5B21B6" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="14,0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <CompositeTransform x:Name="BtnTransform" />
+                                </Border.RenderTransform>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.16" />
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="BtnTransform" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.15">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                                <DoubleAnimation Storyboard.TargetName="BtnTransform" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.15">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.10" />
+                                                <DoubleAnimation Storyboard.TargetName="BtnTransform" Storyboard.TargetProperty="ScaleX" To="1.015" Duration="0:0:0.14">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                                <DoubleAnimation Storyboard.TargetName="BtnTransform" Storyboard.TargetProperty="ScaleY" To="1.015" Duration="0:0:0.14">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="BtnTransform" Storyboard.TargetProperty="ScaleX" To="0.965" Duration="0:0:0.07">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                                <DoubleAnimation Storyboard.TargetName="BtnTransform" Storyboard.TargetProperty="ScaleY" To="0.965" Duration="0:0:0.07">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" To="0.6" Duration="0:0:0.12" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid>
+                                    <Border x:Name="HoverOverlay" Background="#5B21B6" CornerRadius="7" Opacity="0" />
+                                    <Border x:Name="PressOverlay" Background="#4C1D95" CornerRadius="7" Opacity="0" />
+                                    <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Minimal Ghost Icon Button (Animated Hover & Press) -->
+            <Style x:Key="MinimalIconButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="#27272A" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="7" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <CompositeTransform x:Name="IconBtnTransform" />
+                                </Border.RenderTransform>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.10" />
+                                                <DoubleAnimation Storyboard.TargetName="IconBtnTransform" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="IconBtnTransform" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.14" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.08" />
+                                                <DoubleAnimation Storyboard.TargetName="IconBtnTransform" Storyboard.TargetProperty="ScaleX" To="1.06" Duration="0:0:0.12">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                                <DoubleAnimation Storyboard.TargetName="IconBtnTransform" Storyboard.TargetProperty="ScaleY" To="1.06" Duration="0:0:0.12">
+                                                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="IconBtnTransform" Storyboard.TargetProperty="ScaleX" To="0.90" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="IconBtnTransform" Storyboard.TargetProperty="ScaleY" To="0.90" Duration="0:0:0.06" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid>
+                                    <Border x:Name="HoverOverlay" Background="#F1F1F4" CornerRadius="6" Opacity="0" />
+                                    <Border x:Name="PressOverlay" Background="#E4E4E9" CornerRadius="6" Opacity="0" />
+                                    <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Custom Close Button (Animated Soft Red Hover & Press) -->
+            <Style x:Key="CloseWindowButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <CompositeTransform x:Name="CloseBtnTransform" />
+                                </Border.RenderTransform>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.10" />
+                                                <DoubleAnimation Storyboard.TargetName="CloseBtnTransform" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="CloseBtnTransform" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.14" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="CloseBtnTransform" Storyboard.TargetProperty="ScaleX" To="1.06" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="CloseBtnTransform" Storyboard.TargetProperty="ScaleY" To="1.06" Duration="0:0:0.12" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PressOverlay" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="CloseBtnTransform" Storyboard.TargetProperty="ScaleX" To="0.90" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="CloseBtnTransform" Storyboard.TargetProperty="ScaleY" To="0.90" Duration="0:0:0.06" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid>
+                                    <Border x:Name="HoverOverlay" Background="#FEE2E2" CornerRadius="6" Opacity="0" />
+                                    <Border x:Name="PressOverlay" Background="#FECACA" CornerRadius="6" Opacity="0" />
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Segmented Pill Option Button Style (Animated Hover & Press) -->
+            <Style x:Key="PillOptionButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="#52525B" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="5" />
+                <Setter Property="Padding" Value="9,4" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Padding="{TemplateBinding Padding}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <CompositeTransform x:Name="PillTransform" />
+                                </Border.RenderTransform>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PillTransform" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="PillTransform" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.12" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PillTransform" Storyboard.TargetProperty="ScaleX" To="1.03" Duration="0:0:0.10" />
+                                                <DoubleAnimation Storyboard.TargetName="PillTransform" Storyboard.TargetProperty="ScaleY" To="1.03" Duration="0:0:0.10" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PillTransform" Storyboard.TargetProperty="ScaleX" To="0.93" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="PillTransform" Storyboard.TargetProperty="ScaleY" To="0.93" Duration="0:0:0.06" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Entrance Slogan Stagger Animation -->
+            <Storyboard x:Name="StartupSloganStoryboard">
+                <DoubleAnimation Storyboard.TargetName="SloganRow1" Storyboard.TargetProperty="Opacity" From="0" To="1" BeginTime="0:0:0.04" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="SloganT1" Storyboard.TargetProperty="Y" From="6" To="0" BeginTime="0:0:0.04" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="SloganRow2" Storyboard.TargetProperty="Opacity" From="0" To="1" BeginTime="0:0:0.11" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="SloganT2" Storyboard.TargetProperty="Y" From="6" To="0" BeginTime="0:0:0.11" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="SloganRow3" Storyboard.TargetProperty="Opacity" From="0" To="1" BeginTime="0:0:0.18" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="SloganT3" Storyboard.TargetProperty="Y" From="6" To="0" BeginTime="0:0:0.18" Duration="0:0:0.24">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <!-- Purge Pulse Ring Animation -->
+            <Storyboard x:Name="PurgePulseStoryboard" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="PurgePulseScale" Storyboard.TargetProperty="ScaleX" From="1.0" To="1.14" Duration="0:0:0.95">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="PurgePulseScale" Storyboard.TargetProperty="ScaleY" From="1.0" To="1.14" Duration="0:0:0.95">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="PurgePulseRing" Storyboard.TargetProperty="Opacity" From="0.55" To="0.0" Duration="0:0:0.95">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <!-- Gear Hover Rotation -->
+            <Storyboard x:Name="GearSpinInStoryboard">
+                <DoubleAnimation Storyboard.TargetName="GearTransform" Storyboard.TargetProperty="Rotation" To="45" Duration="0:0:0.22">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+            <Storyboard x:Name="GearSpinOutStoryboard">
+                <DoubleAnimation Storyboard.TargetName="GearTransform" Storyboard.TargetProperty="Rotation" To="0" Duration="0:0:0.22">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <!-- View Switch Slide Transitions -->
+            <Storyboard x:Name="OpenSettingsStoryboard">
+                <DoubleAnimation Storyboard.TargetName="SettingsTransform" Storyboard.TargetProperty="TranslateX" From="26" To="0" Duration="0:0:0.22">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="SettingsView" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.20" />
+            </Storyboard>
+            <Storyboard x:Name="OpenMainStoryboard">
+                <DoubleAnimation Storyboard.TargetName="MainTransform" Storyboard.TargetProperty="TranslateX" From="-26" To="0" Duration="0:0:0.22">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="MainView" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.20" />
+            </Storyboard>
+        </ResourceDictionary>
+    </Grid.Resources>
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="48" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- ========================================================= -->
+    <!-- CUSTOM SEAMLESS HEADER                                    -->
+    <!-- ========================================================= -->
+    <Grid Grid.Row="0" Background="#FFFFFF">
+        <!-- Full-bleed Drag Surface across entire 48px header -->
+        <Grid x:Name="TitleBarDragArea" Background="#01FFFFFF" />
+
+        <!-- Left: Custom VR Logo -->
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="20,4,0,0" IsHitTestVisible="False">
+            <Image x:Name="LogoSvgImage" Height="22" Width="42" Stretch="Uniform" VerticalAlignment="Center" />
+            <Viewbox x:Name="LogoFallbackBadge" Width="16" Height="16" VerticalAlignment="Center" Visibility="Collapsed">
+                <Canvas Width="24" Height="24">
+                    <Path Data="M13 2L4.5 13.5H11.5L10 22L19.5 10.5H12.5L13 2Z" Fill="#18181B" />
+                </Canvas>
+            </Viewbox>
+        </StackPanel>
+
+        <!-- Right: Window Minimize & Close Controls -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,4,14,0" Spacing="4">
+            <Button x:Name="WinMinimizeButton"
+                    Style="{StaticResource MinimalIconButtonStyle}"
+                    Width="30"
+                    Height="30"
+                    ToolTipService.ToolTip="Minimize">
+                <Viewbox Width="11" Height="11">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="M5 12h14"
+                              Stroke="#3F3F46"
+                              StrokeThickness="2.2"
+                              StrokeStartLineCap="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+
+            <Button x:Name="WinCloseButton"
+                    Style="{StaticResource CloseWindowButtonStyle}"
+                    Width="30"
+                    Height="30"
+                    ToolTipService.ToolTip="Close">
+                <Viewbox Width="11" Height="11">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="M6 6l12 12 M18 6l-12 12"
+                              Stroke="#3F3F46"
+                              StrokeThickness="2.2"
+                              StrokeStartLineCap="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+        </StackPanel>
+    </Grid>
+
+    <Rectangle Grid.Row="1" Height="1" Fill="#F1F1F5" Margin="20,0,20,0" />
+
+    <!-- ========================================================= -->
+    <!-- MAIN VIEW                                                 -->
+    <!-- ========================================================= -->
+    <Grid x:Name="MainView" Grid.Row="2" Background="#01FFFFFF" Padding="20,14,20,16" Visibility="Visible">
+        <Grid.RenderTransform>
+            <CompositeTransform x:Name="MainTransform" />
+        </Grid.RenderTransform>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: Clean Concise Slogans (Uniform Arrow SVG Icons, Staggered Entrance) -->
+        <StackPanel Grid.Row="0" Spacing="5">
+            <StackPanel x:Name="SloganRow1" Orientation="Horizontal" Spacing="8" Opacity="0">
+                <StackPanel.RenderTransform>
+                    <TranslateTransform x:Name="SloganT1" />
+                </StackPanel.RenderTransform>
+                <Viewbox Width="11" Height="11" VerticalAlignment="Center">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="M5 12h14 M13 6l6 6-6 6" Stroke="#71717A" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                    </Canvas>
+                </Viewbox>
+                <TextBlock Text="Keep RAM clear and responsive." FontSize="11.5" Foreground="#27272A" />
+            </StackPanel>
+
+            <StackPanel x:Name="SloganRow2" Orientation="Horizontal" Spacing="8" Opacity="0">
+                <StackPanel.RenderTransform>
+                    <TranslateTransform x:Name="SloganT2" />
+                </StackPanel.RenderTransform>
+                <Viewbox Width="11" Height="11" VerticalAlignment="Center">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="M5 12h14 M13 6l6 6-6 6" Stroke="#71717A" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                    </Canvas>
+                </Viewbox>
+                <TextBlock Text="Trim idle processes &amp; system cache." FontSize="11.5" Foreground="#52525B" />
+            </StackPanel>
+
+            <StackPanel x:Name="SloganRow3" Orientation="Horizontal" Spacing="8" Opacity="0">
+                <StackPanel.RenderTransform>
+                    <TranslateTransform x:Name="SloganT3" />
+                </StackPanel.RenderTransform>
+                <Viewbox Width="11" Height="11" VerticalAlignment="Center">
+                    <Canvas Width="24" Height="24">
+                        <Path Data="M5 12h14 M13 6l6 6-6 6" Stroke="#71717A" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                    </Canvas>
+                </Viewbox>
+                <TextBlock Text="Fast cleanup when you need it." FontSize="11.5" Foreground="#71717A" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Row 1: Custom Animated Purple Ring Gauge -->
+        <Grid Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Width="160" Height="160">
+            <!-- Animated Pulse Halo (active while purging) -->
+            <Ellipse x:Name="PurgePulseRing"
+                     Width="148"
+                     Height="148"
+                     Stroke="#7C3AED"
+                     StrokeThickness="2"
+                     Opacity="0"
+                     RenderTransformOrigin="0.5,0.5"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center">
+                <Ellipse.RenderTransform>
+                    <ScaleTransform x:Name="PurgePulseScale" />
+                </Ellipse.RenderTransform>
+            </Ellipse>
+
+            <!-- Soft Lavender Track -->
+            <Ellipse Width="148"
+                     Height="148"
+                     Stroke="#F3EEFF"
+                     StrokeThickness="8"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+
+            <!-- Active Purple Gradient Arc -->
+            <Path x:Name="UsageArcPath"
+                  Width="148"
+                  Height="148"
+                  StrokeThickness="8"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#6D28D9" Offset="0" />
+                        <GradientStop Color="#9333EA" Offset="1" />
+                    </LinearGradientBrush>
+                </Path.Stroke>
+            </Path>
+
+            <!-- Center Percentage & GB -->
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="1">
+                <TextBlock x:Name="UsagePercentText"
+                           Text="0%"
+                           FontSize="36"
+                           FontWeight="SemiBold"
+                           Foreground="#111113"
+                           HorizontalAlignment="Center" />
+                <TextBlock x:Name="UsageRatioText"
+                           Text="0.0 / 0.0 GB"
+                           FontSize="11.5"
+                           FontWeight="SemiBold"
+                           Foreground="#71717A"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Row 2: Minimal 3-Column Metrics -->
+        <Border Grid.Row="2" BorderBrush="#EFEFF4" BorderThickness="0,1,0,1" Padding="0,9">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="USED" FontSize="9.5" FontWeight="SemiBold" Foreground="#71717A" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="InUseText" Text="0.0 GB" FontSize="12.5" FontWeight="SemiBold" Foreground="#18181B" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <Rectangle Grid.Column="1" Fill="#EFEFF4" Width="1" Margin="0,2" />
+
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="FREE" FontSize="9.5" FontWeight="SemiBold" Foreground="#71717A" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="AvailableText" Text="0.0 GB" FontSize="12.5" FontWeight="SemiBold" Foreground="#6D28D9" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <Rectangle Grid.Column="3" Fill="#EFEFF4" Width="1" Margin="0,2" />
+
+                <StackPanel Grid.Column="4" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="CACHED" FontSize="9.5" FontWeight="SemiBold" Foreground="#71717A" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="CachedText" Text="0.0 GB" FontSize="12.5" FontWeight="SemiBold" Foreground="#18181B" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Row 3: Purge Memory CTA + Feedback -->
+        <StackPanel Grid.Row="3" Margin="0,12,0,0" Spacing="7">
+            <Button x:Name="PurgeButton"
+                    Style="{StaticResource PrimaryPurgeButtonStyle}"
+                    Height="40"
+                    HorizontalAlignment="Stretch">
+                <TextBlock x:Name="PurgeButtonText"
+                           Text="Purge Memory"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="#FFFFFF"
+                           VerticalAlignment="Center" />
+            </Button>
+
+            <TextBlock x:Name="PurgeStatusText"
+                       Text="Auto Purge: OFF"
+                       FontSize="11"
+                       Foreground="#71717A"
+                       HorizontalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <!-- Row 4: Footer (Animated Monochrome Settings SVG at Bottom-Left, Minimize-to-Tray at Bottom-Right) -->
+        <Grid Grid.Row="4" Margin="0,8,0,0">
+            <Button x:Name="SettingsButton"
+                    Style="{StaticResource MinimalIconButtonStyle}"
+                    Width="32"
+                    Height="32"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    ToolTipService.ToolTip="Settings">
+                <Viewbox Width="17" Height="17" RenderTransformOrigin="0.5,0.5">
+                    <Viewbox.RenderTransform>
+                        <CompositeTransform x:Name="GearTransform" />
+                    </Viewbox.RenderTransform>
+                    <Canvas Width="24" Height="24">
+                        <Ellipse Canvas.Left="9" Canvas.Top="9" Width="6" Height="6"
+                                 Stroke="#27272A" StrokeThickness="1.8" />
+                        <Path Data="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+                              Stroke="#27272A"
+                              StrokeThickness="1.8"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+
+            <Button x:Name="MinimizeTrayButton"
+                    Style="{StaticResource MinimalIconButtonStyle}"
+                    Width="32"
+                    Height="32"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    ToolTipService.ToolTip="Hide to Tray">
+                <Viewbox Width="16" Height="16">
+                    <Canvas Width="24" Height="24">
+                        <Rectangle Canvas.Left="3" Canvas.Top="4" Width="18" Height="16" RadiusX="2" RadiusY="2"
+                                   Stroke="#3F3F46" StrokeThickness="1.8" />
+                        <Path Data="M3 15h18 M10 9.5l2 2 2-2"
+                              Stroke="#3F3F46"
+                              StrokeThickness="1.8"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+        </Grid>
+    </Grid>
+
+    <!-- ========================================================= -->
+    <!-- SETTINGS VIEW (Clean Single-Line, Custom Slim Scrollbar)  -->
+    <!-- ========================================================= -->
+    <Grid x:Name="SettingsView" Grid.Row="2" Padding="20,12,14,14" Visibility="Collapsed">
+        <Grid.RenderTransform>
+            <CompositeTransform x:Name="SettingsTransform" />
+        </Grid.RenderTransform>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Sub-Header -->
+        <Grid Grid.Row="0" Padding="0,0,6,8" BorderBrush="#EFEFF4" BorderThickness="0,0,0,1" Margin="0,0,0,6">
+            <Grid x:Name="SettingsHeaderDragArea" Background="#01FFFFFF" />
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="BackButton"
+                        Style="{StaticResource MinimalIconButtonStyle}"
+                        Width="28"
+                        Height="28"
+                        ToolTipService.ToolTip="Back">
+                    <Viewbox Width="15" Height="15">
+                        <Canvas Width="24" Height="24">
+                            <Path Data="M15 18L9 12L15 6"
+                                  Stroke="#18181B"
+                                  StrokeThickness="2"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round" />
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+                <TextBlock Text="Settings" FontSize="14.5" FontWeight="SemiBold" Foreground="#111113" VerticalAlignment="Center" IsHitTestVisible="False" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ScrollViewer with Hidden OS Bar + Dedicated 4px Rounded Thumb Indicator -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="10" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer x:Name="SettingsScrollViewer"
+                          Grid.Column="0"
+                          VerticalScrollBarVisibility="Hidden"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="10">
+
+                <!-- STARTUP & TRAY -->
+                <StackPanel>
+                    <TextBlock Text="STARTUP &amp; TRAY" FontSize="10" FontWeight="SemiBold" Foreground="#71717A" Margin="0,2,0,4" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M12 3v9 M18.36 6.64a9 9 0 1 1-12.73 0" Stroke="#27272A" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Run at startup" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleAutoStart" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Rectangle Canvas.Left="3" Canvas.Top="4" Width="18" Height="16" RadiusX="2" RadiusY="2" Stroke="#3F3F46" StrokeThickness="1.8" /><Path Data="M3 15h18 M10 10l2 2 2-2" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Start minimized" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleStartMinimized" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2 M12 4v10 M8 10l4 4 4-4" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Minimize to tray" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleMinimizeToTray" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Rectangle Canvas.Left="3" Canvas.Top="4" Width="18" Height="16" RadiusX="2" RadiusY="2" Stroke="#3F3F46" StrokeThickness="1.8" /><Path Data="M9 9l6 6 M15 9l-6 6" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Close to tray" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleCloseToTray" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <!-- Custom Segmented Pill for Tray Icon -->
+                    <Grid Height="40">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M13 2L4.5 13.5H11.5L10 22L19.5 10.5H12.5L13 2Z" Fill="#27272A" /></Canvas></Viewbox>
+                            <TextBlock Text="Tray icon" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#F4F4F6" BorderBrush="#E4E4E7" BorderThickness="1" CornerRadius="7" Padding="2" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <Button x:Name="TrayModeLogoBtn" Style="{StaticResource PillOptionButtonStyle}" Content="Icon" />
+                                <Button x:Name="TrayModePercentBtn" Style="{StaticResource PillOptionButtonStyle}" Content="RAM %" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M12 17v5 M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Always on top" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleAlwaysOnTop" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- PURGE TARGETS -->
+                <StackPanel>
+                    <TextBlock Text="PURGE TARGETS" FontSize="10" FontWeight="SemiBold" Foreground="#71717A" Margin="0,2,0,4" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Rectangle Canvas.Left="4" Canvas.Top="6" Width="16" Height="10" RadiusX="2" RadiusY="2" Stroke="#27272A" StrokeThickness="1.8" /><Path Data="M8 16v3M12 16v3M16 16v3M8 6V3M12 6V3M16 6V3" Stroke="#27272A" StrokeThickness="1.8" StrokeStartLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Working sets" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleWorkingSets" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M12 2L2 7l10 5 10-5-10-5z M2 12l10 5 10-5 M2 17l10 5 10-5" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="System cache" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleSystemCache" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Ellipse Canvas.Left="3" Canvas.Top="2" Width="18" Height="6" Stroke="#3F3F46" StrokeThickness="1.8" /><Path Data="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3 M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Standby list" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleStandbyList" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5 M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16 M16 16h5v5" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Modified list" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleModifiedList" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- AUTOMATION -->
+                <StackPanel>
+                    <TextBlock Text="AUTOMATION" FontSize="10" FontWeight="SemiBold" Foreground="#71717A" Margin="0,2,0,4" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M12 14l4-4 M3.34 19a10 10 0 1 1 17.32 0" Stroke="#27272A" StrokeThickness="1.8" StrokeStartLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Auto-purge" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleAutoPurge" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <!-- Custom Stepper Pill: Threshold -->
+                    <Grid Height="40">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M12 14l4-4 M3.34 19a10 10 0 1 1 17.32 0" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Threshold" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#F4F4F6" BorderBrush="#E4E4E7" BorderThickness="1" CornerRadius="7" Padding="2" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="ThresholdPrevBtn" Style="{StaticResource MinimalIconButtonStyle}" Width="24" Height="24">
+                                    <Viewbox Width="11" Height="11"><Canvas Width="24" Height="24"><Path Data="M15 18l-6-6 6-6" Stroke="#3F3F46" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                                </Button>
+                                <TextBlock x:Name="ThresholdValueText" Text="80%" Width="40" TextAlignment="Center" FontSize="11.5" FontWeight="SemiBold" Foreground="#6D28D9" VerticalAlignment="Center" />
+                                <Button x:Name="ThresholdNextBtn" Style="{StaticResource MinimalIconButtonStyle}" Width="24" Height="24">
+                                    <Viewbox Width="11" Height="11"><Canvas Width="24" Height="24"><Path Data="M9 18l6-6-6-6" Stroke="#3F3F46" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <!-- Custom Stepper Pill: Interval -->
+                    <Grid Height="40">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Ellipse Canvas.Left="3" Canvas.Top="3" Width="18" Height="18" Stroke="#3F3F46" StrokeThickness="1.8" /><Path Data="M12 7v5l3 2" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Interval" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#F4F4F6" BorderBrush="#E4E4E7" BorderThickness="1" CornerRadius="7" Padding="2" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="IntervalPrevBtn" Style="{StaticResource MinimalIconButtonStyle}" Width="24" Height="24">
+                                    <Viewbox Width="11" Height="11"><Canvas Width="24" Height="24"><Path Data="M15 18l-6-6 6-6" Stroke="#3F3F46" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                                </Button>
+                                <TextBlock x:Name="IntervalValueText" Text="Off" Width="40" TextAlignment="Center" FontSize="11.5" FontWeight="SemiBold" Foreground="#6D28D9" VerticalAlignment="Center" />
+                                <Button x:Name="IntervalNextBtn" Style="{StaticResource MinimalIconButtonStyle}" Width="24" Height="24">
+                                    <Viewbox Width="11" Height="11"><Canvas Width="24" Height="24"><Path Data="M9 18l6-6-6-6" Stroke="#3F3F46" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F4F4F6" />
+
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0" Stroke="#3F3F46" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                            <TextBlock Text="Notifications" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleNotifications" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Elevation row (hidden cleanly when already Admin) -->
+                <Grid x:Name="SettingsElevateRow" Height="42" BorderBrush="#EFEFF4" BorderThickness="0,1,0,0" Padding="0,4,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Viewbox Width="15" Height="15"><Canvas Width="24" Height="24"><Path Data="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" Stroke="#27272A" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeLineJoin="Round" /></Canvas></Viewbox>
+                        <TextBlock Text="Administrator mode" FontSize="12.5" Foreground="#18181B" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button x:Name="SettingsElevateButton"
+                            Grid.Column="1"
+                            Style="{StaticResource MinimalIconButtonStyle}"
+                            BorderBrush="#E4E4E7"
+                            BorderThickness="1"
+                            Content="Elevate"
+                            FontSize="11.5"
+                            FontWeight="SemiBold"
+                            Foreground="#6D28D9"
+                            Height="28"
+                            Padding="10,0"
+                            VerticalAlignment="Center" />
+                </Grid>
+
+                <!-- App Info & Support Developer (Bottom of Settings) -->
+                <Grid BorderBrush="#EFEFF4" BorderThickness="0,1,0,0" Padding="0,12,0,6" Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="VRam" FontSize="13" FontWeight="SemiBold" Foreground="#111113" VerticalAlignment="Center" />
+                            <TextBlock Text="v1.0" FontSize="11.5" FontWeight="SemiBold" Foreground="#6D28D9" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="Created by : @vinnotdkk" FontSize="11.5" Foreground="#52525B" />
+                    </StackPanel>
+
+                    <Button x:Name="SupportDevButton"
+                            Grid.Column="1"
+                            Style="{StaticResource PrimaryPurgeButtonStyle}"
+                            Height="32"
+                            Padding="12,0"
+                            CornerRadius="7"
+                            VerticalAlignment="Center"
+                            ToolTipService.ToolTip="https://sociabuzz.com/idnvinnmalay">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Viewbox Width="13" Height="13" VerticalAlignment="Center">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M12 21s-7-4.35-9.33-8.5C.67 8.92 2.92 4.5 7 4.5c2.04 0 3.74 1.07 5 2.7C13.26 5.57 14.96 4.5 17 4.5c4.08 0 6.33 4.42 4.33 8C19 16.65 12 21 12 21z"
+                                          Fill="#FFFFFF" />
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Text="Support Developer" FontSize="11.5" FontWeight="SemiBold" Foreground="#FFFFFF" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Custom Slim 4px Rounded Scroll Indicator -->
+            <Grid x:Name="CustomScrollTrack" Grid.Column="1" VerticalAlignment="Stretch" Margin="4,2,2,2">
+                <Border x:Name="CustomScrollThumb"
+                        Width="4"
+                        Height="48"
+                        CornerRadius="2"
+                        Background="#D4D4D8"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Opacity="0.85">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="ScrollThumbTransform" />
+                    </Border.RenderTransform>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</Grid>
