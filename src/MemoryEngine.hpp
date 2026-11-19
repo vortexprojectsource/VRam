@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace vram {
 
@@ -21,6 +22,8 @@ struct PurgeOptions {
     bool systemCache = true;
     bool standbyList = true;
     bool modifiedList = false;
+    bool maximizeGameRam = true;
+    std::vector<std::wstring> protectedGames;
 };
 
 struct PurgeResult {
@@ -30,8 +33,26 @@ struct PurgeResult {
     uint32_t beforePercent = 0;
     uint32_t afterPercent = 0;
     uint32_t trimmedProcesses = 0;
+    uint32_t protectedProcesses = 0;
+    std::wstring activeGameName;
+    uint64_t activeGameRamBytes = 0;
     bool kernelPurgeSucceeded = false;
     bool privilegeLimited = false;
+};
+
+struct RunningProcessInfo {
+    std::wstring exeName;
+    uint32_t instanceCount = 0;
+    uint64_t totalWorkingSetBytes = 0;
+    bool hasWindow = false;
+};
+
+struct ProtectedGameStatus {
+    bool anyRunning = false;
+    std::wstring primaryGameName;
+    uint32_t runningInstanceCount = 0;
+    uint64_t combinedWorkingSetBytes = 0;
+    bool boosted = false;
 };
 
 class MemoryEngine {
@@ -41,6 +62,9 @@ public:
     static void EnableAvailablePrivileges();
     static MemorySnapshot Query();
     static PurgeResult Purge(const PurgeOptions& options);
+    static std::vector<RunningProcessInfo> ListRunningProcesses();
+    static ProtectedGameStatus QueryAndApplyGameProtection(const std::vector<std::wstring>& protectedGames,
+                                                           bool applyBoost);
     static std::wstring FormatBytes(uint64_t bytes);
 };
 

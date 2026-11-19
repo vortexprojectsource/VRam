@@ -1,11 +1,11 @@
-# VRam V1.0 — Windows Native Memory Cleaner
+# VRam V2.0 — Windows Native Memory Cleaner & Game Shield
 
-**VRam V1.0** is an open-source, lightweight memory management utility for **Windows 10** and **Windows 11**, written in native **C++20**, **Win32**, and **XAML Islands** (`DesktopWindowXamlSource`). It compiles directly to a standalone Win32 x64 executable without WebView2, Electron, Chromium, or external runtime dependencies.
+**VRam V2.0** is an open-source, standalone native memory cleaner and game RAM shield for **Windows 10** (1903+ / build 18362+) and **Windows 11**, written in **C++20**, **Win32**, **Direct2D/DirectWrite**, and **XAML Islands** (`DesktopWindowXamlSource`). It statically links the MSVC runtime (`/MT`) so it runs out of the box on clean Windows machines without requiring any VC++ Redistributable, WebView2, Electron, or external frameworks.
 
 > [!NOTE]
 > **Project Identity**
-> - **Product Name:** `VRam Free V1.0`
-> - **File Description:** `VRam V1.0 - Memory Cleaner`
+> - **Product Name:** `VRam V2.0`
+> - **File Description:** `VRam V2.0 - Memory Cleaner & Game Shield`
 > - **Copyright:** `Vortex Open Source Project`
 > - **Created by:** `@vinnotdkk`
 > - **Repository:** https://github.com/vortexprojectsource/VRam
@@ -14,17 +14,30 @@
 
 ## Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Technical Stack & Linked Libraries](#technical-stack--linked-libraries)
-3. [6-Stage Memory Purge Pipeline](#6-stage-memory-purge-pipeline)
-4. [Privilege Model (Standard User vs. Administrator)](#privilege-model-standard-user-vs-administrator)
-5. [User Interface & System Tray Features](#user-interface--system-tray-features)
-6. [Configuration & Persistence (`config.xml`)](#configuration--persistence-configxml)
-7. [Command-Line Arguments](#command-line-arguments)
-8. [Building from Source](#building-from-source)
-9. [Custom Branding & Icon Overrides](#custom-branding--icon-overrides)
-10. [Repository Structure](#repository-structure)
-11. [License & Support](#license--support)
+1. [What's New in V2.0](#whats-new-in-v20)
+2. [Architecture Overview](#architecture-overview)
+3. [Technical Stack & Linked Libraries](#technical-stack--linked-libraries)
+4. [Memory Purge Pipeline & Game Shield](#memory-purge-pipeline--game-shield)
+5. [Privilege Model (Standard User vs. Administrator)](#privilege-model-standard-user-vs-administrator)
+6. [Notifications & System Tray Features](#notifications--system-tray-features)
+7. [Configuration & Persistence (`config.xml`)](#configuration--persistence-configxml)
+8. [Command-Line Arguments](#command-line-arguments)
+9. [Building from Source](#building-from-source)
+10. [Custom Branding & Icon Overrides](#custom-branding--icon-overrides)
+11. [Repository Structure](#repository-structure)
+12. [License & Support](#license--support)
+
+---
+
+## What's New in V2.0
+
+- **Zero-Redist Portable Binary (`/MT` Static CRT):** Statically links MSVC runtime libraries (`MultiThreaded`), eliminating `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, and `MSVCP140.dll` missing-DLL startup failures on fresh PCs.
+- **Cross-Device Stability & Crash Hardening:**
+  - Top-level WinRT/COM and `OnCreate()` XAML Island exception catching with clear diagnostic `MessageBoxW` reporting instead of silent termination on stripped or legacy Windows builds.
+  - Safe `.try_as<T>()` control binding, `m_dpi` zero-guards, `_snwprintf_s(..., _TRUNCATE)` bounded string formatting, WIC `Lock` / D2D brush `HRESULT` validation, and a pure-GDI fallback renderer for `%` tray icons.
+  - Protected core Windows process exclusion list (`csrss.exe`, `smss.exe`, `wininit.exe`, `services.exe`, `lsass.exe`, `dwm.exe`, `audiodg.exe`, `svchost.exe`, `Memory Compression`, etc.) during elevated working-set sweeps.
+- **Floating Purge Toast Notification (`PurgeToastWindow`):** Compact non-activating layered `HWND_TOPMOST` toast (`356 x 118` DIP) in VRam's white-purple-black theme (`Direct2D` + `DirectWrite` + `UpdateLayeredWindow`). Shows the embedded VR logo and a spinning violet ring while purging, transitions to a purple check badge with freed RAM and protected game metrics when complete, and auto-fades out via a slim bottom countdown bar after ~3 seconds.
+- **Game Shield (Select, Exclude & Maximize Game RAM):** Select any game `.exe` (via file browser or one-click picker from live running apps) so it is bypassed during memory purges while receiving elevated process/memory/I/O prioritization and soft working-set expansion headroom.
 
 ---
 
@@ -35,143 +48,122 @@ VRam separates native Windows system integration from its UI layer so memory ope
 ```text
 +-----------------------------------------------------------------------+
 |                         wWinMain (src/main.cpp)                       |
-|  - Enforces single instance via Local\VRam_V1_SingleInstance_Mutex    |
+|  - Enforces single instance via Local\VRam_V2_SingleInstance_Mutex    |
 |  - Parses --minimized / --elevated-restart startup flags              |
-|  - Initializes STA COM/WinRT & dispatches XAML Islands message loop   |
+|  - Initializes STA WinRT cleanly & catches unhandled startup errors   |
 +-----------------------------------+-----------------------------------+
                                     |
           +-------------------------+-------------------------+
           v                                                   v
 +-----------------------------+               +-----------------------------+
 |   AppWindow (Win32 + XAML)  |               |  MemoryEngine (Background)  |
-| - Frameless 368x488 DIP UI  |               | - GlobalMemoryStatusEx()    |
-| - Custom pointer-drag window|  Worker Req   | - GetPerformanceInfo()      |
+| - Frameless 368x524 DIP UI  |               | - GlobalMemoryStatusEx()    |
+| - Main / Game Shield /Cfg   |  Worker Req   | - GetPerformanceInfo()      |
 | - WS_EX_LAYERED alpha fade  | ------------> | - NtSetSystemInformation()  |
 | - 2000ms telemetry polling  | <------------ | - SetSystemFileCacheSize()  |
-| - Auto-Purge timer/threshold|  PurgeResult  | - SetProcessWorkingSetSizeEx|
+| - Auto-Purge & Toast host   |  PurgeResult  | - Game Shield prioritization|
 +--------------+--------------+               +-----------------------------+
                |
-    +----------+----------+
-    v                     v
-+--------------------+  +------------------------------+
-|  TrayIconRenderer  |  |  ConfigManager               |
-| - Direct2D/DWrite  |  | - Native xmllite.dll I/O     |
-| - Live RAM % icon  |  | - %APPDATA%\VRam\config.xml  |
-| - SVG/ICO fallback |  | - HKCU Run startup entry     |
-+--------------------+  +------------------------------+
+    +----------+--------------------+--------------------+
+    v                               v                    v
++--------------------+  +------------------------+  +-------------------+
+|  TrayIconRenderer  |  |  PurgeToastWindow      |  |  ConfigManager    |
+| - Direct2D/DWrite  |  | - UpdateLayeredWindow  |  | - Native xmllite  |
+| - Live RAM % + GDI |  | - Topmost non-focusing |  | - %APPDATA%\VRam  |
+| - SVG/ICO fallback |  | - Auto-close countdown |  | - HKCU Run key    |
++--------------------+  +------------------------+  +-------------------+
 ```
 
 ---
 
 ## Technical Stack & Linked Libraries
 
-Every component in VRam relies directly on APIs built into Windows 10 and Windows 11.
+Every component in VRam relies directly on APIs built into Windows 10 and Windows 11 with zero external runtime DLL requirements:
 
 | Component | Implementation | Purpose |
 | :--- | :--- | :--- |
-| **Language & Standard** | **C++20** (`/W4 /EHsc /permissive- /utf-8 /Zc:__cplusplus`) | Native Win32/WinRT systems implementation (`CMakeLists.txt`) |
+| **Language & Runtime** | **C++20** (`/W4 /EHsc /permissive- /utf-8`, `/MT` static CRT) | Self-contained x64 binary (`CMakeLists.txt`) |
 | **Window Host & DPI** | **Win32 (`HWND`)** + `PerMonitorV2` manifest (`resources/app.manifest`) | Frameless windowing, custom fade transitions (`WS_EX_LAYERED`), sharp DPI scaling |
 | **UI Rendering** | **XAML Islands** (`DesktopWindowXamlSource`, `RequestedTheme="Light"`) | Hardware-accelerated vector UI defined in `resources/ui/AppLayout.xaml` |
-| **2D / Text Graphics** | **Direct2D (`d2d1`)**, **DirectWrite (`dwrite`)**, **Direct3D 11 (`d3d11`)**, **WIC (`windowscodecs`)** | Dynamic live-percentage system tray icons and external SVG/PNG rendering |
-| **Memory Telemetry** | `GlobalMemoryStatusEx`, `GetPerformanceInfo`, `psapi` | Real-time physical RAM usage %, **USED**, **FREE**, and **CACHED** metrics |
-| **Kernel Memory APIs** | `NtSetSystemInformation` (`ntdll.dll`), `SetSystemFileCacheSize`, `EmptyWorkingSet` | Working set trimming, cache flushing, page combining, and standby purging |
-| **XML Persistence** | **Windows XML Lite (`xmllite.dll`)** + `shlwapi` | Zero-dependency XML serialization for `config.xml` |
-| **System Integration** | `advapi32`, `shell32`, `dwmapi`, `comctl32`, `ole32` | Registry startup key, UAC elevation prompt, Shell tray notifications |
+| **2D / Toast Graphics** | **Direct2D (`d2d1`)**, **DirectWrite (`dwrite`)**, **Direct3D 11 (`d3d11`)**, **WIC** | Floating layered purge notification card, dynamic RAM % tray badges, SVG/PNG icons |
+| **Memory & Process APIs** | `GlobalMemoryStatusEx`, `GetPerformanceInfo`, `psapi`, `tlhelp32` | Live physical RAM metrics, app enumeration, and Game Shield inspection |
+| **Kernel & Boost APIs** | `NtSetSystemInformation`, `NtSetInformationProcess`, `SetProcessInformation` | Memory list purging, EcoQoS off, Memory Priority Normal, I/O & soft working-set headroom |
+| **Dialogs & Persistence** | **Windows XML Lite (`xmllite.dll`)**, `comdlg32`, `shlwapi` | Native `config.xml` I/O and `.exe` file picker dialog |
+| **System Integration** | `advapi32`, `shell32`, `dwmapi`, `comctl32`, `ole32` | Registry startup entry, UAC elevation, Shell tray menu & theme integration |
 
 ---
 
-## 6-Stage Memory Purge Pipeline
+## Memory Purge Pipeline & Game Shield
 
-When you click **Purge Memory** (from the main window or tray menu) or an **Auto Purge** trigger fires, **`MemoryEngine::Purge`** runs a deterministic 6-stage pipeline off the UI thread after requesting **`SE_INCREASE_QUOTA_NAME`**, **`SE_PROF_SINGLE_PROCESS_NAME`**, and **`SE_DEBUG_NAME`**:
+### 6-Stage Memory Purge Pipeline
 
-| Stage | Operation | Underlying Windows API / Mechanism | Condition / `PurgeOptions` Flag |
+When you trigger **Purge Memory** or an **Auto Purge** schedule fires, **`MemoryEngine::Purge`** runs off the UI thread after requesting **`SE_INCREASE_QUOTA_NAME`**, **`SE_PROF_SINGLE_PROCESS_NAME`**, **`SE_INC_BASE_PRIORITY_NAME`**, and **`SE_DEBUG_NAME`**:
+
+| Stage | Operation | Underlying Windows API / Mechanism | Notes |
 | :---: | :--- | :--- | :--- |
-| **1** | **Working Sets Trim** | Calls `NtSetSystemInformation(SystemMemoryListInformation [80], MemoryEmptyWorkingSets [2])` and enumerates accessible processes via `CreateToolhelp32Snapshot`, applying `SetProcessWorkingSetSizeEx(..., -1, -1, 0)` and `EmptyWorkingSet`. | `options.workingSets` |
-| **2** | **System & Registry Cache Flush** | Clears filesystem cache size bounds via `SetSystemFileCacheSize((SIZE_T)-1, (SIZE_T)-1, 0)` and issues `NtSetSystemInformation(SystemRegistryReconciliationInformation [155])`. | `options.systemCache` |
-| **3** | **Modified Page List Flush** | Flushes modified pages to their backing stores using `NtSetSystemInformation(SystemMemoryListInformation [80], MemoryFlushModifiedList [3])` before standby cleanup. | `options.modifiedList` |
-| **4** | **Physical Page Combining** | Deduplicates identical physical memory pages across processes using `NtSetSystemInformation(SystemCombinePhysicalMemoryInformation [130])` with `MEMORY_COMBINE_INFORMATION_EX`. | Runs whenever `NtSetSystemInformation` is resolved |
-| **5** | **Standby List Double-Sweep** | Purges `MemoryPurgeLowPriorityStandbyList [5]` first, followed immediately by `MemoryPurgeStandbyList [4]` (`SystemMemoryListInformation [80]`). | `options.standbyList` |
-| **6** | **Settle Pass & Self-Trim** | Waits **70 ms** (`Sleep(70)`), repeats **Working Sets** (`workingSets`), **System File Cache** (`systemCache`), and **Standby List** (`standbyList`), runs `HeapCompact(GetProcessHeap(), 0)`, trims VRam's own process via `EmptyWorkingSet(GetCurrentProcess())`, and waits **80 ms** before reading the post-purge snapshot. | Finishes every purge cycle |
+| **1** | **Protected Working Sets Trim** | Trims accessible non-system, non-shielded background processes via `SetProcessWorkingSetSizeEx(..., -1, -1, 0)` and `EmptyWorkingSet`. Calls `MemoryEmptyWorkingSets [2]` only when no protected game is actively running. | Bypasses core Windows OS processes and all selected **Game Shield** executables |
+| **2** | **System & Registry Cache Flush** | Clears filesystem cache bounds (`SetSystemFileCacheSize`) and issues `NtSetSystemInformation(SystemRegistryReconciliationInformation [155])`. | Controlled by `options.systemCache` |
+| **3** | **Modified Page List Flush** | Flushes modified pages to backing storage using `MemoryFlushModifiedList [3]`. | Controlled by `options.modifiedList` |
+| **4** | **Physical Page Combining** | Deduplicates identical physical pages using `SystemCombinePhysicalMemoryInformation [130]`. | Runs when `ntdll` resolves `NtSetSystemInformation` |
+| **5** | **Standby List Double-Sweep** | Releases `MemoryPurgeLowPriorityStandbyList [5]` then `MemoryPurgeStandbyList [4]`, converting cached standby pages back into free physical RAM without trimming active protected games. | Controlled by `options.standbyList` |
+| **6** | **Settle Pass & Re-Boost** | Waits **70 ms**, performs settle trim & standby pass, reapplies **Game Shield** boost if active, compacts VRam's own heap, waits **80 ms**, and computes `freedBytes`. | Updates gauge & toast summary |
 
-> [!TIP]
-> **How Freed Memory Is Calculated**
-> **`PurgeResult`** compares pre-purge and post-purge snapshots from `MemoryEngine::Query()` (`beforeUsedBytes` vs `afterUsedBytes`), returning `freedBytes`, percentage delta (`beforePercent` -> `afterPercent`), `trimmedProcesses`, `kernelPurgeSucceeded`, and `privilegeLimited`.
+### Game Shield (RAM Protection & Maximization)
+
+Configured games in `config.xml` receive continuous protection and non-destructive OS tuning when **Maximize game RAM** (`maximizeGameRam`) is enabled:
+- **Purge Exclusion:** All matching running `.exe` processes are skipped during working-set trimming, and kernel-wide `MemoryEmptyWorkingSets` (`[2]`) is suppressed while any shielded game is active so Windows never shrinks its working set.
+- **Page Retention & Memory Priority:** Applies `SetProcessInformation(..., ProcessMemoryPriority, ...)` = **`5` (`MEMORY_PRIORITY_NORMAL`)** so Windows Memory Manager avoids aggressively paging out the game under pressure.
+- **CPU & EcoQoS Unthrottling:** Clears `PROCESS_POWER_THROTTLING_EXECUTION_SPEED` via `ProcessPowerThrottling` (disabling EcoQoS), enables dynamic priority boost (`SetProcessPriorityBoost(..., FALSE)`), raises `NORMAL`/`BELOW_NORMAL` priority classes to **`ABOVE_NORMAL_PRIORITY_CLASS`**, and sets high I/O hint (`NtSetInformationProcess(..., ProcessIoPriority, 3)`).
+- **Soft Working-Set Headroom:** Expands soft min/max working-set guidance using `QUOTA_LIMITS_HARDWS_MIN_DISABLE | QUOTA_LIMITS_HARDWS_MAX_DISABLE` clamped safely beneath physical RAM minus a `1.5 GB` OS reserve (never enforcing hard limits that could cause out-of-memory errors).
+
+> [!WARNING]
+> Some games protected by kernel-level anti-cheat drivers (e.g., Vanguard, EAC, BattlEye) restrict external handle access (`PROCESS_SET_INFORMATION` / `PROCESS_SET_QUOTA`). When access is blocked by anti-cheat, VRam safely skips handle mutation and still shields the game from VRam's own purge passes (`MemoryEmptyWorkingSets` suppression + process skip).
 
 ---
 
 ## Privilege Model (Standard User vs. Administrator)
 
-VRam's manifest sets **`requestedExecutionLevel level="asInvoker"`** so the application launches immediately at user login without forcing a UAC prompt every time Windows boots.
+VRam's manifest uses **`requestedExecutionLevel level="asInvoker"`** so it starts at login without intrusive UAC dialogs.
 
 | Feature / Scope | Standard User Mode | Administrator Mode (Elevated) |
 | :--- | :--- | :--- |
-| **Real-Time RAM Gauge & Monitoring** | **Full Support** (`GlobalMemoryStatusEx` / `GetPerformanceInfo`) | **Full Support** |
-| **System Tray Icon & Live RAM % Badge** | **Full Support** | **Full Support** |
-| **User-Owned Process Working Set Trim** | **Full Support** | **Full Support** |
-| **Cross-Session / System Process Trimming** | **Limited** (non-accessible handles skipped) | **Full Support** (`SE_DEBUG_NAME` enabled) |
-| **Standby List, Modified List & File Cache** | **Blocked by Kernel** (`privilegeLimited = true`) | **Full Support** (`SE_PROF_SINGLE_PROCESS_NAME` + `SE_INCREASE_QUOTA_NAME`) |
+| **Real-Time RAM Gauge & Toast Notification** | **Full Support** | **Full Support** |
+| **Game Shield Selection & Exclusion** | **Full Support** | **Full Support** |
+| **User-Owned Process Trim & Game Boost** | **Full Support** | **Full Support** (`SE_INC_BASE_PRIORITY_NAME` improves high I/O priority) |
+| **Cross-Session / Background Trim** | **Limited** | **Full Support** (`SE_DEBUG_NAME`, core OS processes still skipped safely) |
+| **Standby List, Modified List & File Cache** | **Blocked by Kernel** | **Full Support** (`SE_PROF_SINGLE_PROCESS_NAME` + `SE_INCREASE_QUOTA_NAME`) |
 
-> [!IMPORTANT]
-> **On-Demand UAC Elevation**
-> If you run VRam un-elevated, it still trims accessible user-owned process working sets and notes **`| Elevate for standby`** when kernel privileges are restricted. Open **Settings** inside VRam and click **Elevate** to relaunch elevated via `ShellExecuteExW(..., L"runas", ...)` with `--elevated-restart`.
+Open **Settings -> Elevate** at any time to relaunch elevated via `ShellExecuteExW(..., L"runas", ...)` with `--elevated-restart`.
 
 ---
 
-## User Interface & System Tray Features
+## Notifications & System Tray Features
 
-- **Compact Frameless Window:** Fixed **`368 x 488` DIP** light interface (`#FFFFFF` root surface with `#6D28D9` primary purple accent and monochrome vector icons).
-- **Window Dragging:** Click and drag on the **48px top header** or empty areas of the window (`CapturePointer` + `SetWindowPos`) without interfering with interactive buttons.
-- **Smooth Layered Transitions:** Uses `WS_EX_LAYERED` + `SetLayeredWindowAttributes` (`12 ms` timer steps) for fade-in and fade-out transitions when opening, minimizing, or hiding to tray.
-- **Live Ring Telemetry (`2000 ms` Polling):** Displays active physical RAM utilization percentage alongside **USED**, **FREE**, and **CACHED** readouts.
+- **Compact Frameless Window (`368 x 524` DIP):** Clean light-mode interface with an animated ring gauge, **USED / FREE / CACHED** metrics, **Game Shield** status bar, **Game Shield** view, and **Settings**.
+- **VRam Purge Toast (`PurgeToastWindow`):** Matches VRam's white (`#FFFFFF`), purple (`#6D28D9` / `#F3EEFF`), and black (`#111113`) palette cleanly at bottom-right (`WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`) whenever manual or auto purge runs — even while minimized to tray — and closes automatically after completion.
 - **Two System Tray Icon Styles:**
-  - **`Icon` Mode (`logo`):** Renders VRam's multi-resolution `VR` brand icon (`assets/vram.ico` or external `logo.svg`).
-  - **`RAM %` Mode (`percent`):** Uses **Direct2D** + **DirectWrite** to dynamically render a rounded tray badge (`#F4F4F5` background, `#D4D4D8` border, `#18181B` digits) with a fill bar (`#6D28D9` normal, shifting to **`#DC2626`** at **>= 90%** usage).
-- **Tray Context Menu:** Right-click the tray icon for quick actions: **`Hide to Tray`** / **`Show VRam`**, **`Purge Memory Now`**, **`Settings`**, and **`Exit VRam`**.
-- **Auto-Purge Scheduler:**
-  - **Threshold Trigger:** Automatically purges RAM at **`70%`**, **`75%`**, **`80%`**, **`85%`**, or **`90%`** (with a **60-second cooldown** between automatic triggers).
-  - **Interval Trigger:** Scheduled background purge every **`5`**, **`15`**, **`30`**, or **`60` minutes** (or disabled at **`0`**).
-- **Auto-Start with Windows:** Registers `"VRam"` under **`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`**, optionally appending `--minimized` to start directly in the system tray.
+  - **`Icon` (`logo`):** Crisp brand icon (`assets/vram.ico` or external `logo.svg`).
+  - **`RAM %` (`percent`):** Live percentage badge via **Direct2D + DirectWrite** (with automatic pure-GDI fallback renderer).
+- **Tray Context Menu:** Right-click the tray icon for **`Hide to Tray` / `Show VRam V2.0`**, **`Purge Memory Now`**, **`Game Shield`**, **`Settings`**, and **`Exit VRam`**.
 
 ---
 
 ## Configuration & Persistence (`config.xml`)
 
-VRam saves all preferences natively using **`xmllite.dll`** without third-party JSON/YAML parsers.
-
-**Configuration File Path:**
-```text
-%APPDATA%\VRam\config.xml
-```
-*(Falls back to `<exe_dir>\VRam\config.xml` if `%APPDATA%` cannot be resolved.)*
-
-**Default XML Output (`ConfigManager::Save`):**
+Settings are stored natively via **`xmllite.dll`** at `%APPDATA%\VRam\config.xml` (existing V1.0 configs migrate automatically):
 
 ```xml
 <?xml version="1.0"?>
-<VRamConfig version="1.0">
+<VRamConfig version="2.0">
   <Startup autoStart="false" startMinimized="false" />
   <Window minimizeToTray="true" closeToTray="true" alwaysOnTop="false" trayStyle="logo" />
   <Purge workingSets="true" systemCache="true" standbyList="true" modifiedList="true" />
   <Automation autoPurgeEnabled="false" thresholdPercent="80" intervalMinutes="0" showNotifications="true" />
+  <GameProtection maximizeRam="true">
+    <Game exe="cs2.exe" />
+  </GameProtection>
 </VRamConfig>
 ```
-
-| Element | Attribute | Accepted Values | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **`Startup`** | `autoStart` | `true` / `false` (or `1` / `0`) | `false` | Adds or removes `"VRam"` in `HKCU\...\Run` |
-| **`Startup`** | `startMinimized` | `true` / `false` (or `1` / `0`) | `false` | Appends `--minimized` to the startup launch command |
-| **`Window`** | `minimizeToTray` | `true` / `false` (or `1` / `0`) | `true` | Hides window to tray instead of minimizing to taskbar |
-| **`Window`** | `closeToTray` | `true` / `false` (or `1` / `0`) | `true` | Clicking close (`×`) hides to tray instead of exiting |
-| **`Window`** | `alwaysOnTop` | `true` / `false` (or `1` / `0`) | `false` | Keeps the VRam window pinned above other windows |
-| **`Window`** | `trayStyle` | `"logo"` / `"percent"` | `"logo"` | Selects between brand icon and Direct2D live RAM % badge |
-| **`Purge`** | `workingSets` | `true` / `false` (or `1` / `0`) | `true` | Enables Stage 1 working set trimming |
-| **`Purge`** | `systemCache` | `true` / `false` (or `1` / `0`) | `true` | Enables Stage 2 system & registry cache flushing |
-| **`Purge`** | `standbyList` | `true` / `false` (or `1` / `0`) | `true` | Enables Stage 5 standby list cleanup |
-| **`Purge`** | `modifiedList` | `true` / `false` (or `1` / `0`) | `true` | Enables Stage 3 modified page list flush |
-| **`Automation`** | `autoPurgeEnabled` | `true` / `false` (or `1` / `0`) | `false` | Master switch for threshold/interval auto-purge |
-| **`Automation`** | `thresholdPercent` | `70`, `75`, `80`, `85`, `90` in UI (`50`–`95` clamped) | `80` | RAM % threshold trigger (with 60s cooldown) |
-| **`Automation`** | `intervalMinutes` | `0`, `5`, `15`, `30`, `60` in UI (`0`–`1440` clamped) | `0` | Periodic cleanup interval in minutes (`0` = off) |
-| **`Automation`** | `showNotifications` | `true` / `false` (or `1` / `0`) | `true` | Displays tray balloon notification after a purge completes |
 
 ---
 
@@ -179,89 +171,64 @@ VRam saves all preferences natively using **`xmllite.dll`** without third-party 
 
 | Argument | Behavior |
 | :--- | :--- |
-| **`--minimized`** | Starts VRam directly in the system tray without showing the main window on launch. Passed automatically when **Start Minimized** is enabled with **Run at Startup**. |
-| **`--elevated-restart`** | Internal flag passed when relaunching via the **Elevate** button in **Settings** (`ShellExecuteExW` with `"runas"`). |
+| **`--minimized`** | Starts VRam directly in the system tray without showing the main window on launch. |
+| **`--elevated-restart`** | Internal flag passed when relaunching via **Settings -> Elevate**. |
 
 ---
 
 ## Building from Source
 
 ### Prerequisites
+- **Windows 10 / 11 (x64)**
+- **CMake `3.20+`** (`Kitware.CMake`)
+- **Visual Studio 2019 / 2022 / 2026** or **Build Tools** with **Desktop development with C++**
 
-| Requirement | Component / Version |
-| :--- | :--- |
-| **Operating System** | Windows 10 or Windows 11 (x64) |
-| **CMake** | `3.20` or newer (`Kitware.CMake`) |
-| **Compiler & SDK** | Visual Studio 2019 / 2022 / 2026 or **Visual Studio Build Tools** with **Desktop development with C++** (`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`) and Windows SDK |
-
-### Option 1: Automated Build Script (`build.bat`)
-
-Run **`build.bat`** from the project root directory. The script automatically performs these steps:
-
-1. Searches **`PATH`** and `%ProgramFiles%\CMake\bin\cmake.exe` for CMake.
-2. Queries **`vswhere.exe`** for an installed MSVC x64 C++ toolchain (`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`).
-3. If **CMake** or **MSVC Build Tools** is missing, asks you to choose:
-   - **`[1] Download / Install sekarang`** — installs missing dependencies via `winget` (or opens the official download pages in your browser if `winget` is unavailable).
-   - **`[2] Batal`** — aborts the build cleanly.
-4. Detects if **`VRam.exe`** is running (`tasklist`) and offers to close it so linker output is not locked.
-5. Selects the matching Visual Studio generator (`2019` / `2022` / `2026`), runs `cmake -B build -A x64`, and builds **`Release`** (`build\Release\VRam.exe`).
+### Automated or Manual Build
 
 ```bat
 build.bat
 ```
 
-### Option 2: Manual CMake Commands
+Or manually via CMake:
 
 ```bat
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-**Compiled Output:**
-```text
-build\Release\VRam.exe
-```
+Output executable: `build\Release\VRam.exe` (statically linked `/MT`).
 
 ---
 
 ## Custom Branding & Icon Overrides
 
-Without recompiling the binary, you can override the header logo or system tray icon at runtime by placing custom files in the **same folder as `VRam.exe`**:
-
-| External File (Beside `VRam.exe`) | Overrides | Fallback When Absent |
-| :--- | :--- | :--- |
-| **`logo.png`** | Top-left header emblem in the main window (`BitmapImage`, `DecodePixelHeight(44)`) | Embedded `IDR_PNG_LOGO` (`assets/logo_ui.png`) |
-| **`logo.svg`** | System tray icon when `trayStyle` is `"logo"` (rendered via `ID2D1DeviceContext5::CreateSvgDocument`) | Embedded `IDI_VRAM_APP` (`assets/vram.ico` multi-res `16..256px`) |
+Place `logo.png` (header emblem override) or `logo.svg` (tray icon override) in the same directory as `VRam.exe` to customize branding at runtime without recompiling.
 
 ---
 
 ## Repository Structure
 
 ```text
-VRam V1.0/
+VRam/
 ├── assets/
-│   ├── icons/                       # Monochrome SVG assets for UI & tray renderer
-│   │   ├── back.svg, bell.svg, cache.svg, clock.svg, flush.svg
-│   │   ├── gauge.svg, logo.svg, memory.svg, pin.svg, purge.svg
-│   │   └── settings.svg, shield.svg, standby.svg, startup.svg, tray.svg
-│   ├── logo.png                     # High-res 1024x1024 project logo source
-│   ├── logo_ui.png                  # Tight-cropped header logo embedded as IDR_PNG_LOGO
-│   └── vram.ico                     # Multi-resolution Windows icon (16, 24, 32, 48, 256 px)
+│   ├── icons/                        # Monochrome SVG icons
+│   ├── logo.png / logo_ui.png        # High-res & tight-cropped VR logos
+│   └── vram.ico                      # Multi-resolution Windows icon (16..256 px)
 ├── resources/
-│   ├── ui/
-│   │   └── AppLayout.xaml           # Light-theme XAML Islands layout, styles & storyboards
-│   ├── app.manifest                 # PerMonitorV2 DPI & asInvoker UAC manifest
-│   ├── resource.h                   # Win32 resource IDs
-│   └── VRam.rc                      # Embedded icon, PNG, XAML & PE VersionInfo metadata
+│   ├── ui/AppLayout.xaml             # XAML Islands UI layout (Main, Game Shield, Settings)
+│   ├── app.manifest                  # PerMonitorV2 DPI, XAML compatibility & asInvoker manifest
+│   ├── resource.h                    # Win32 resource IDs
+│   └── VRam.rc                       # Embedded resources & V2.0 PE VersionInfo metadata
 ├── src/
-│   ├── main.cpp                     # wWinMain, single-instance mutex & message loop
-│   ├── AppWindow.hpp / .cpp         # Win32 host window, XAML bindings, drag, fade & timers
-│   ├── MemoryEngine.hpp / .cpp      # RAM telemetry & 6-stage kernel/user memory cleaner
-│   ├── ConfigManager.hpp / .cpp     # xmllite XML config persistence & HKCU startup entry
-│   └── TrayIconRenderer.hpp / .cpp  # Direct2D/DirectWrite tray badges & resource loader
+│   ├── main.cpp                      # wWinMain, single-instance mutex & exception guards
+│   ├── AppWindow.hpp / .cpp          # Win32 host window, XAML bindings, Game Shield & polling
+│   ├── MemoryEngine.hpp / .cpp       # RAM telemetry, 6-stage purge & Game Shield prioritization
+│   ├── PurgeToastWindow.hpp / .cpp   # Layered white-purple-black purge toast notification
+│   ├── ConfigManager.hpp / .cpp      # xmllite XML config I/O & HKCU startup entry
+│   └── TrayIconRenderer.hpp / .cpp   # Direct2D/DWrite + GDI fallback tray renderer
 ├── .gitignore
-├── build.bat                        # Automated CMake + MSVC dependency check & Release x64 build
-├── CMakeLists.txt                   # C++20 CMake build definition
+├── build.bat                         # CMake + MSVC Release x64 builder
+├── CMakeLists.txt                    # C++20 + /MT static runtime CMake build config
 └── README.md
 ```
 

@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(VRam VERSION 1.0.0 LANGUAGES CXX RC)
+project(VRam VERSION 2.0.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_executable(VRam WIN32
     src/main.cpp
@@ -15,6 +16,8 @@ add_executable(VRam WIN32
     src/ConfigManager.hpp
     src/TrayIconRenderer.cpp
     src/TrayIconRenderer.hpp
+    src/PurgeToastWindow.cpp
+    src/PurgeToastWindow.hpp
     resources/VRam.rc
     resources/app.manifest
 )
@@ -59,6 +62,7 @@ target_link_libraries(VRam PRIVATE
     psapi
     dwmapi
     comctl32
+    comdlg32
     shlwapi
     xmllite
     d2d1

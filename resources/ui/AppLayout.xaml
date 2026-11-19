@@ -371,6 +371,65 @@
                 </Setter>
             </Style>
 
+            <!-- Card Action Button Style (Game Shield Card & Action Pills) -->
+            <Style x:Key="CardActionButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="#FAFAFC" />
+                <Setter Property="BorderBrush" Value="#EAEAF2" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="12,8" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <CompositeTransform x:Name="CardBtnTransform" />
+                                </Border.RenderTransform>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverTint" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.14" />
+                                                <DoubleAnimation Storyboard.TargetName="PressTint" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.10" />
+                                                <DoubleAnimation Storyboard.TargetName="CardBtnTransform" Storyboard.TargetProperty="ScaleX" To="1.0" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="CardBtnTransform" Storyboard.TargetProperty="ScaleY" To="1.0" Duration="0:0:0.12" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOver">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverTint" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12" />
+                                                <DoubleAnimation Storyboard.TargetName="PressTint" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.08" />
+                                            </Storyboard>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="PressTint" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="CardBtnTransform" Storyboard.TargetProperty="ScaleX" To="0.985" Duration="0:0:0.06" />
+                                                <DoubleAnimation Storyboard.TargetName="CardBtnTransform" Storyboard.TargetProperty="ScaleY" To="0.985" Duration="0:0:0.06" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid>
+                                    <Border x:Name="HoverTint" Background="#F5F3FF" BorderBrush="#DDD6FE" BorderThickness="1" CornerRadius="{TemplateBinding CornerRadius}" Opacity="0" />
+                                    <Border x:Name="PressTint" Background="#EDE9FE" BorderBrush="#C4B5FD" BorderThickness="1" CornerRadius="{TemplateBinding CornerRadius}" Opacity="0" />
+                                    <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- Entrance Slogan Stagger Animation -->
             <Storyboard x:Name="StartupSloganStoryboard">
                 <DoubleAnimation Storyboard.TargetName="SloganRow1" Storyboard.TargetProperty="Opacity" From="0" To="1" BeginTime="0:0:0.04" Duration="0:0:0.24">
@@ -430,6 +489,12 @@
                     <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
                 <DoubleAnimation Storyboard.TargetName="MainView" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.20" />
+            </Storyboard>
+            <Storyboard x:Name="OpenGamesStoryboard">
+                <DoubleAnimation Storyboard.TargetName="GamesTransform" Storyboard.TargetProperty="TranslateX" From="26" To="0" Duration="0:0:0.22">
+                    <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="GameView" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.20" />
             </Storyboard>
         </ResourceDictionary>
     </Grid.Resources>
@@ -506,6 +571,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Row 0: Clean Concise Slogans (Uniform Arrow SVG Icons, Staggered Entrance) -->
@@ -543,7 +609,7 @@
                         <Path Data="M5 12h14 M13 6l6 6-6 6" Stroke="#71717A" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
                     </Canvas>
                 </Viewbox>
-                <TextBlock Text="Fast cleanup when you need it." FontSize="11.5" Foreground="#71717A" />
+                <TextBlock Text="Protect selected games &amp; maximize RAM." FontSize="11.5" Foreground="#71717A" />
             </StackPanel>
         </StackPanel>
 
@@ -638,8 +704,48 @@
             </Grid>
         </Border>
 
-        <!-- Row 3: Purge Memory CTA + Feedback -->
-        <StackPanel Grid.Row="3" Margin="0,12,0,0" Spacing="7">
+        <!-- Row 3: Game Shield Selector Bar (Protect & Maximize Selected Game RAM) -->
+        <Button x:Name="GameShieldButton"
+                Grid.Row="3"
+                Style="{StaticResource CardActionButtonStyle}"
+                HorizontalAlignment="Stretch"
+                Margin="0,10,0,0"
+                Padding="12,9">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Viewbox Grid.Column="0" Width="18" Height="18" Margin="0,0,11,0" VerticalAlignment="Center">
+                    <Canvas Width="24" Height="24">
+                        <Rectangle Canvas.Left="2" Canvas.Top="6" Width="20" Height="12" RadiusX="4" RadiusY="4"
+                                   Stroke="#27272A" StrokeThickness="1.8" />
+                        <Path Data="M6 12h4 M8 10v4"
+                              Stroke="#27272A" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        <Ellipse Canvas.Left="13.8" Canvas.Top="12.0" Width="2.2" Height="2.2" Fill="#27272A" />
+                        <Ellipse Canvas.Left="16.2" Canvas.Top="9.8" Width="2.2" Height="2.2" Fill="#27272A" />
+                    </Canvas>
+                </Viewbox>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                    <TextBlock x:Name="GameShieldTitleText" Text="Game Shield" FontSize="12" FontWeight="SemiBold" Foreground="#18181B" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="GameShieldSubText" Text="Select game to skip purge" FontSize="10.5" Foreground="#71717A" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <Border x:Name="GameShieldBadgeBorder" Background="#F3EEFF" CornerRadius="5" Padding="7,3">
+                        <TextBlock x:Name="GameShieldBadgeText" Text="Select" FontSize="10.5" FontWeight="SemiBold" Foreground="#6D28D9" />
+                    </Border>
+                    <Viewbox Width="11" Height="11" VerticalAlignment="Center">
+                        <Canvas Width="24" Height="24">
+                            <Path Data="M9 18l6-6-6-6" Stroke="#71717A" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeLineJoin="Round" />
+                        </Canvas>
+                    </Viewbox>
+                </StackPanel>
+            </Grid>
+        </Button>
+
+        <!-- Row 4: Purge Memory CTA + Feedback -->
+        <StackPanel Grid.Row="4" Margin="0,10,0,0" Spacing="6">
             <Button x:Name="PurgeButton"
                     Style="{StaticResource PrimaryPurgeButtonStyle}"
                     Height="40"
@@ -660,8 +766,8 @@
                        TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
-        <!-- Row 4: Footer (Animated Monochrome Settings SVG at Bottom-Left, Minimize-to-Tray at Bottom-Right) -->
-        <Grid Grid.Row="4" Margin="0,8,0,0">
+        <!-- Row 5: Footer (Animated Monochrome Settings SVG at Bottom-Left, Minimize-to-Tray at Bottom-Right) -->
+        <Grid Grid.Row="5" Margin="0,6,0,0">
             <Button x:Name="SettingsButton"
                     Style="{StaticResource MinimalIconButtonStyle}"
                     Width="32"
@@ -706,6 +812,176 @@
                     </Canvas>
                 </Viewbox>
             </Button>
+        </Grid>
+    </Grid>
+
+    <!-- ========================================================= -->
+    <!-- GAME SHIELD VIEW (Protect Selected Games & Maximize RAM)  -->
+    <!-- ========================================================= -->
+    <Grid x:Name="GameView" Grid.Row="2" Padding="20,12,14,14" Visibility="Collapsed">
+        <Grid.RenderTransform>
+            <CompositeTransform x:Name="GamesTransform" />
+        </Grid.RenderTransform>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Sub-Header -->
+        <Grid Grid.Row="0" Padding="0,0,6,8" BorderBrush="#EFEFF4" BorderThickness="0,0,0,1" Margin="0,0,0,6">
+            <Grid x:Name="GameHeaderDragArea" Background="#01FFFFFF" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button x:Name="GameBackButton"
+                            Style="{StaticResource MinimalIconButtonStyle}"
+                            Width="28"
+                            Height="28"
+                            ToolTipService.ToolTip="Back">
+                        <Viewbox Width="15" Height="15">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M15 18L9 12L15 6"
+                                      Stroke="#18181B"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                    <TextBlock Text="Game Shield" FontSize="14.5" FontWeight="SemiBold" Foreground="#111113" VerticalAlignment="Center" IsHitTestVisible="False" />
+                </StackPanel>
+                <Button x:Name="BoostGamesNowBtn"
+                        Grid.Column="1"
+                        Style="{StaticResource PrimaryPurgeButtonStyle}"
+                        Height="27"
+                        Padding="10,0"
+                        CornerRadius="6"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="Boost RAM" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFFF" />
+                </Button>
+            </Grid>
+        </Grid>
+
+        <!-- Scrollable Game List + Running Process Picker -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="10" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer x:Name="GameScrollViewer"
+                          Grid.Column="0"
+                          VerticalScrollBarVisibility="Hidden"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="10" Margin="0,0,2,6">
+
+                    <!-- Maximize Game RAM Toggle -->
+                    <Grid Height="44">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="Maximize game RAM" FontSize="12.5" FontWeight="SemiBold" Foreground="#18181B" />
+                            <TextBlock Text="Bypass purge, boost priority &amp; EcoQoS off" FontSize="10.5" Foreground="#71717A" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="ToggleMaximizeGame" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Width="40" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                    <Rectangle Height="1" Fill="#F1F1F5" />
+
+                    <!-- Browse .exe & Refresh Running Buttons -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="BrowseGameBtn"
+                                Grid.Column="0"
+                                Style="{StaticResource CardActionButtonStyle}"
+                                HorizontalAlignment="Stretch"
+                                Height="34"
+                                Padding="8,0"
+                                HorizontalContentAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Viewbox Width="13" Height="13">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z M12 11v5 M9.5 13.5h5"
+                                              Stroke="#6D28D9" StrokeThickness="1.9" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="Browse .exe" FontSize="11.5" FontWeight="SemiBold" Foreground="#18181B" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="RefreshProcsBtn"
+                                Grid.Column="2"
+                                Style="{StaticResource CardActionButtonStyle}"
+                                HorizontalAlignment="Stretch"
+                                Height="34"
+                                Padding="8,0"
+                                HorizontalContentAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Viewbox Width="13" Height="13">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M21 12a9 9 0 1 1-2.64-6.36 M21 3v6h-6"
+                                              Stroke="#3F3F46" StrokeThickness="1.9" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="Refresh Apps" FontSize="11.5" FontWeight="SemiBold" Foreground="#18181B" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <TextBlock x:Name="GameActionStatusText"
+                               Text="Selected games are never trimmed during Purge."
+                               FontSize="10.5"
+                               Foreground="#71717A"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <!-- Selected Protected Games -->
+                    <StackPanel Spacing="5">
+                        <Grid>
+                            <TextBlock Text="SELECTED GAMES" FontSize="10" FontWeight="SemiBold" Foreground="#71717A" HorizontalAlignment="Left" />
+                            <TextBlock Text="Protected &amp; Maximized" FontSize="10" Foreground="#6D28D9" HorizontalAlignment="Right" />
+                        </Grid>
+                        <Border x:Name="NoGamesEmptyCard" Background="#FAFAFC" BorderBrush="#EFEFF4" BorderThickness="1" CornerRadius="7" Padding="10,9">
+                            <TextBlock Text="No games selected yet. Browse an .exe or click + below." FontSize="11" Foreground="#71717A" TextWrapping="Wrap" />
+                        </Border>
+                        <StackPanel x:Name="ProtectedGamesList" Spacing="5" />
+                    </StackPanel>
+
+                    <Rectangle Height="1" Fill="#F1F1F5" Margin="0,2" />
+
+                    <!-- Running Processes Picker -->
+                    <StackPanel Spacing="5">
+                        <Grid>
+                            <TextBlock Text="RUNNING APPS &amp; GAMES" FontSize="10" FontWeight="SemiBold" Foreground="#71717A" HorizontalAlignment="Left" />
+                            <TextBlock Text="Click + to protect" FontSize="10" Foreground="#71717A" HorizontalAlignment="Right" />
+                        </Grid>
+                        <StackPanel x:Name="RunningProcessesList" Spacing="5" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Custom Slim 4px Rounded Scroll Indicator -->
+            <Grid x:Name="GameScrollTrack" Grid.Column="1" VerticalAlignment="Stretch" Margin="4,2,2,2">
+                <Border x:Name="GameScrollThumb"
+                        Width="4"
+                        Height="48"
+                        CornerRadius="2"
+                        Background="#D4D4D8"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Opacity="0.85">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="GameScrollThumbTransform" />
+                    </Border.RenderTransform>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 
@@ -969,7 +1245,7 @@
                     <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Text="VRam" FontSize="13" FontWeight="SemiBold" Foreground="#111113" VerticalAlignment="Center" />
-                            <TextBlock Text="v1.0" FontSize="11.5" FontWeight="SemiBold" Foreground="#6D28D9" VerticalAlignment="Center" />
+                            <TextBlock Text="v2.0" FontSize="11.5" FontWeight="SemiBold" Foreground="#6D28D9" VerticalAlignment="Center" />
                         </StackPanel>
                         <TextBlock Text="Created by : @vinnotdkk" FontSize="11.5" Foreground="#52525B" />
                     </StackPanel>

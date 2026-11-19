@@ -27,7 +27,7 @@ public:
     static std::vector<uint8_t> LoadLogoPngBytes(HINSTANCE hInst);
 
 private:
-    HICON BitmapPixelsToIcon(const uint8_t* bgraPixels, int width, int height);
+    static HICON BitmapPixelsToIcon(const uint8_t* bgraPixels, int width, int height);
     HICON RenderSvgToIcon(const std::vector<uint8_t>& svgBytes, int sizePx);
 };
 

@@ -20,6 +20,30 @@ namespace {
 constexpr wchar_t kRunSubKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kRunValueName[] = L"VRam";
 
+std::wstring NormalizeExeName(const std::wstring& input) {
+    if (input.empty()) return {};
+    const wchar_t* base = PathFindFileNameW(input.c_str());
+    std::wstring name = base ? base : input;
+    while (!name.empty() && (name.back() == L' ' || name.back() == L'\t' || name.back() == L'"')) {
+        name.pop_back();
+    }
+    while (!name.empty() && (name.front() == L' ' || name.front() == L'\t' || name.front() == L'"')) {
+        name.erase(name.begin());
+    }
+    return name;
+}
+
+void AddUniqueExe(std::vector<std::wstring>& list, const std::wstring& candidate) {
+    std::wstring clean = NormalizeExeName(candidate);
+    if (clean.empty()) return;
+    for (const auto& existing : list) {
+        if (_wcsicmp(existing.c_str(), clean.c_str()) == 0) {
+            return;
+        }
+    }
+    list.push_back(std::move(clean));
+}
+
 bool ParseBool(const wchar_t* val, bool fallback) {
     if (!val) return fallback;
     if (_wcsicmp(val, L"true") == 0 || _wcsicmp(val, L"1") == 0) return true;
@@ -152,6 +176,27 @@ AppConfig ConfigManager::Load() {
                     cfg.showNotifications = ParseBool(val, cfg.showNotifications);
                 }
             }
+        } else if (wcscmp(elemName, L"GameProtection") == 0) {
+            for (HRESULT hr = reader->MoveToFirstAttribute(); hr == S_OK; hr = reader->MoveToNextAttribute()) {
+                const wchar_t* name = nullptr;
+                const wchar_t* val = nullptr;
+                reader->GetLocalName(&name, nullptr);
+                reader->GetValue(&val, nullptr);
+                if (!name || !val) continue;
+                if (wcscmp(name, L"maximizeRam") == 0) {
+                    cfg.maximizeGameRam = ParseBool(val, cfg.maximizeGameRam);
+                }
+            }
+        } else if (wcscmp(elemName, L"Game") == 0) {
+            for (HRESULT hr = reader->MoveToFirstAttribute(); hr == S_OK; hr = reader->MoveToNextAttribute()) {
+                const wchar_t* name = nullptr;
+                const wchar_t* val = nullptr;
+                reader->GetLocalName(&name, nullptr);
+                reader->GetValue(&val, nullptr);
+                if (name && val && wcscmp(name, L"exe") == 0) {
+                    AddUniqueExe(cfg.protectedGames, val);
+                }
+            }
         }
     }
 
@@ -182,7 +227,7 @@ bool ConfigManager::Save(const AppConfig& cfg) {
 
     writer->WriteStartDocument(XmlStandalone_Omit);
     writer->WriteStartElement(nullptr, L"VRamConfig", nullptr);
-    writer->WriteAttributeString(nullptr, L"version", nullptr, L"1.0");
+    writer->WriteAttributeString(nullptr, L"version", nullptr, L"2.0");
 
     writer->WriteStartElement(nullptr, L"Startup", nullptr);
     writer->WriteAttributeString(nullptr, L"autoStart", nullptr, bstr(cfg.autoStart));
@@ -208,6 +253,19 @@ bool ConfigManager::Save(const AppConfig& cfg) {
     writer->WriteAttributeString(nullptr, L"thresholdPercent", nullptr, std::to_wstring(cfg.autoPurgeThreshold).c_str());
     writer->WriteAttributeString(nullptr, L"intervalMinutes", nullptr, std::to_wstring(cfg.autoPurgeIntervalMinutes).c_str());
     writer->WriteAttributeString(nullptr, L"showNotifications", nullptr, bstr(cfg.showNotifications));
+    writer->WriteEndElement();
+
+    writer->WriteStartElement(nullptr, L"GameProtection", nullptr);
+    writer->WriteAttributeString(nullptr, L"maximizeRam", nullptr, bstr(cfg.maximizeGameRam));
+    std::vector<std::wstring> uniqueGames;
+    for (const auto& exe : cfg.protectedGames) {
+        AddUniqueExe(uniqueGames, exe);
+    }
+    for (const auto& exe : uniqueGames) {
+        writer->WriteStartElement(nullptr, L"Game", nullptr);
+        writer->WriteAttributeString(nullptr, L"exe", nullptr, exe.c_str());
+        writer->WriteEndElement();
+    }
     writer->WriteEndElement();
 
     writer->WriteEndElement();

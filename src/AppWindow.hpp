@@ -2,6 +2,7 @@
 
 #include "ConfigManager.hpp"
 #include "MemoryEngine.hpp"
+#include "PurgeToastWindow.hpp"
 #include "TrayIconRenderer.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,6 +25,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace vram {
 
@@ -65,7 +68,8 @@ private:
     void UpdateCustomOptionPills();
     void SaveAndApplyConfig();
 
-    void SwitchToView(bool showSettings);
+    enum class ActiveView { Main, Settings, Games };
+    void SwitchToView(ActiveView view);
     void ShowMainWindow();
     void HideToTray();
     void MinimizeWindow();
@@ -75,17 +79,28 @@ private:
     void ApplyLayeredAlpha(BYTE alpha);
     void ClearLayeredStyle();
     void UpdateIdlePurgeStatusText();
+    void UpdateScrollThumbFor(
+        const winrt::Windows::UI::Xaml::Controls::ScrollViewer& sv,
+        const winrt::Windows::UI::Xaml::Controls::Grid& track,
+        const winrt::Windows::UI::Xaml::Controls::Border& thumb,
+        const winrt::Windows::UI::Xaml::Media::TranslateTransform& tt);
     void UpdateCustomScrollThumb();
+    void UpdateGameScrollThumb();
     void AttachDragHandlers(const winrt::Windows::UI::Xaml::UIElement& element);
 
     void RefreshMemorySnapshot(bool checkAutoPurge);
     void UpdateGaugeVisuals(double percent);
     void TriggerPurgeAsync(bool fromAuto);
 
+    void AddProtectedGameExe(const std::wstring& exeNameOrPath);
+    void RemoveProtectedGameExe(const std::wstring& exeName);
+    void BrowseForGameExe();
+    void RefreshGameProtectionUi(bool applyBoostNow, bool rebuildLists);
+    void RebuildGameListsUi(const std::vector<RunningProcessInfo>& runningProcs);
+
     void InitTrayIcon();
     void UpdateTrayIcon(const MemorySnapshot& snap, bool forceIconRecreate);
     void RemoveTrayIcon();
-    void ShowTrayBalloon(const wchar_t* title, const wchar_t* body);
     void ShowTrayContextMenu();
 
     HINSTANCE m_hInst = nullptr;
@@ -93,10 +108,11 @@ private:
     HWND m_hwndXamlIsland = nullptr;
     bool m_startMinimized = false;
     bool m_isElevated = false;
+    bool m_xamlInitFailed = false;
     bool m_hydratingUi = false;
     bool m_trayAdded = false;
     bool m_closingForReal = false;
-    bool m_showingSettings = false;
+    ActiveView m_activeView = ActiveView::Main;
     bool m_isDraggingWindow = false;
     POINT m_dragStartCursor{};
     POINT m_dragStartWin{};
@@ -114,10 +130,15 @@ private:
     double m_displayedPercent = 0.0;
     double m_targetPercent = 0.0;
     uint64_t m_lastPurgeTickMs = 0;
+    uint64_t m_toastPurgeStartTick = 0;
+    uint32_t m_gameBoostTickDivider = 0;
 
     AppConfig m_config;
     MemorySnapshot m_lastSnapshot;
+    ProtectedGameStatus m_lastGameStatus;
     TrayIconRenderer m_trayRenderer;
+    PurgeToastWindow m_toastWindow;
+    std::unique_ptr<PurgeResult> m_pendingToastResult;
 
     winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager m_xamlManager{nullptr};
     winrt::Windows::UI::Xaml::Hosting::DesktopWindowXamlSource m_xamlSource{nullptr};
@@ -129,9 +150,11 @@ private:
     winrt::Windows::UI::Xaml::Media::Animation::Storyboard m_gearSpinOutSb{nullptr};
     winrt::Windows::UI::Xaml::Media::Animation::Storyboard m_openSettingsSb{nullptr};
     winrt::Windows::UI::Xaml::Media::Animation::Storyboard m_openMainSb{nullptr};
+    winrt::Windows::UI::Xaml::Media::Animation::Storyboard m_openGamesSb{nullptr};
 
     winrt::Windows::UI::Xaml::Controls::Grid m_titleBarDragArea{nullptr};
     winrt::Windows::UI::Xaml::Controls::Grid m_settingsHeaderDragArea{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Grid m_gameHeaderDragArea{nullptr};
     winrt::Windows::UI::Xaml::Controls::Viewbox m_logoFallbackBadge{nullptr};
     winrt::Windows::UI::Xaml::Controls::Image m_logoSvgImage{nullptr};
     winrt::Windows::UI::Xaml::Controls::Button m_winMinimizeBtn{nullptr};
@@ -139,17 +162,37 @@ private:
 
     winrt::Windows::UI::Xaml::Controls::Grid m_mainView{nullptr};
     winrt::Windows::UI::Xaml::Controls::Grid m_settingsView{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Grid m_gameView{nullptr};
     winrt::Windows::UI::Xaml::Shapes::Path m_usageArcPath{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_usagePercentText{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_usageRatioText{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_inUseText{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_availableText{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_cachedText{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Button m_gameShieldBtn{nullptr};
+    winrt::Windows::UI::Xaml::Controls::TextBlock m_gameShieldTitleText{nullptr};
+    winrt::Windows::UI::Xaml::Controls::TextBlock m_gameShieldSubText{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Border m_gameShieldBadgeBorder{nullptr};
+    winrt::Windows::UI::Xaml::Controls::TextBlock m_gameShieldBadgeText{nullptr};
     winrt::Windows::UI::Xaml::Controls::Button m_purgeBtn{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_purgeBtnText{nullptr};
     winrt::Windows::UI::Xaml::Controls::TextBlock m_purgeStatusText{nullptr};
     winrt::Windows::UI::Xaml::Controls::Button m_settingsBtn{nullptr};
     winrt::Windows::UI::Xaml::Controls::Button m_minTrayBtn{nullptr};
+
+    winrt::Windows::UI::Xaml::Controls::Button m_gameBackBtn{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Button m_boostGamesNowBtn{nullptr};
+    winrt::Windows::UI::Xaml::Controls::ScrollViewer m_gameScrollViewer{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Grid m_gameScrollTrack{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Border m_gameScrollThumb{nullptr};
+    winrt::Windows::UI::Xaml::Media::TranslateTransform m_gameScrollThumbTransform{nullptr};
+    winrt::Windows::UI::Xaml::Controls::ToggleSwitch m_tglMaximizeGame{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Button m_browseGameBtn{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Button m_refreshProcsBtn{nullptr};
+    winrt::Windows::UI::Xaml::Controls::TextBlock m_gameActionStatusText{nullptr};
+    winrt::Windows::UI::Xaml::Controls::Border m_noGamesEmptyCard{nullptr};
+    winrt::Windows::UI::Xaml::Controls::StackPanel m_protectedGamesList{nullptr};
+    winrt::Windows::UI::Xaml::Controls::StackPanel m_runningProcessesList{nullptr};
 
     winrt::Windows::UI::Xaml::Controls::Button m_backBtn{nullptr};
     winrt::Windows::UI::Xaml::Controls::ScrollViewer m_settingsScrollViewer{nullptr};

@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-title VRam V1.0 - Build Script
+title VRam V2.0 - Build Script
 cd /d "%~dp0"
 
 echo ==================================================
-echo   VRam V1.0 - Native C++ Release x64 Builder
+echo   VRam V2.0 - Native C++ Release x64 Builder
 echo ==================================================
 echo.
 

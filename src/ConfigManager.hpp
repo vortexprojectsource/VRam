@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace vram {
 
@@ -21,6 +22,9 @@ struct AppConfig {
     int autoPurgeThreshold = 80;
     int autoPurgeIntervalMinutes = 0;
     bool showNotifications = true;
+
+    bool maximizeGameRam = true;
+    std::vector<std::wstring> protectedGames;
 };
 
 class ConfigManager {

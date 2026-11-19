@@ -2,6 +2,7 @@
 #include "../resources/resource.h"
 
 #include <dwmapi.h>
+#include <shlwapi.h>
 #include <windowsx.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 
@@ -10,16 +11,21 @@
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 
+#include <commdlg.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <exception>
 #include <string>
 #include <thread>
 #include <vector>
@@ -35,24 +41,27 @@ namespace vram {
 
 namespace {
 
-constexpr wchar_t kWindowClassName[] = L"VRam_V1_HostWindow";
+constexpr wchar_t kWindowClassName[] = L"VRam_V2_HostWindow";
 constexpr int kClientDipWidth  = 368;
-constexpr int kClientDipHeight = 488;
+constexpr int kClientDipHeight = 524;
 
-constexpr UINT_PTR IDT_POLL_MEMORY  = 1001;
-constexpr UINT_PTR IDT_ARC_ANIM     = 1002;
-constexpr UINT_PTR IDT_WINDOW_FADE  = 1003;
-constexpr UINT_PTR IDT_STATUS_RESET = 1004;
-constexpr UINT     kPollIntervalMs  = 2000;
-constexpr UINT     kArcAnimMs       = 16;
-constexpr UINT     kFadeTimerMs     = 12;
-constexpr UINT     kStatusResetMs   = 4000;
+constexpr UINT_PTR IDT_POLL_MEMORY    = 1001;
+constexpr UINT_PTR IDT_ARC_ANIM       = 1002;
+constexpr UINT_PTR IDT_WINDOW_FADE    = 1003;
+constexpr UINT_PTR IDT_STATUS_RESET   = 1004;
+constexpr UINT_PTR IDT_TOAST_COMPLETE = 1005;
+constexpr UINT     kPollIntervalMs    = 2000;
+constexpr UINT     kArcAnimMs         = 16;
+constexpr UINT     kFadeTimerMs       = 12;
+constexpr UINT     kStatusResetMs     = 4000;
+constexpr uint64_t kToastMinRunMs     = 550;
 
 constexpr UINT kTrayIconId = 1;
 constexpr UINT IDM_TRAY_SHOW     = 40001;
 constexpr UINT IDM_TRAY_PURGE    = 40002;
-constexpr UINT IDM_TRAY_SETTINGS = 40003;
-constexpr UINT IDM_TRAY_EXIT     = 40004;
+constexpr UINT IDM_TRAY_GAMES    = 40003;
+constexpr UINT IDM_TRAY_SETTINGS = 40004;
+constexpr UINT IDM_TRAY_EXIT     = 40005;
 
 constexpr DWORD kDwmWindowCornerPreference = 33;
 constexpr DWORD kDwmRoundCorner            = 2;
@@ -63,6 +72,12 @@ constexpr std::array<int, 5> kIntervals  = {0, 5, 15, 30, 60};
 
 winrt::Windows::UI::Color RgbColor(uint8_t r, uint8_t g, uint8_t b) {
     return winrt::Windows::UI::ColorHelper::FromArgb(255, r, g, b);
+}
+
+std::wstring NormalizeExeFilename(const std::wstring& pathOrName) {
+    if (pathOrName.empty()) return {};
+    const wchar_t* leaf = PathFindFileNameW(pathOrName.c_str());
+    return (leaf && *leaf) ? std::wstring(leaf) : pathOrName;
 }
 
 std::wstring LoadUtf8ResourceAsWide(HINSTANCE hInst, UINT resId) {
@@ -121,6 +136,9 @@ bool AppWindow::Create() {
     wc.lpszClassName = kWindowClassName;
 
     m_dpi = GetDpiForSystem();
+    if (m_dpi == 0) {
+        m_dpi = 96;
+    }
     m_appIconLarge = static_cast<HICON>(LoadImageW(
         m_hInst, MAKEINTRESOURCEW(IDI_VRAM_APP), IMAGE_ICON,
         GetSystemMetricsForDpi(SM_CXICON, m_dpi),
@@ -154,14 +172,20 @@ bool AppWindow::Create() {
     m_hwnd = CreateWindowExW(
         exStyle,
         kWindowClassName,
-        L"VRam V1.0",
+        L"VRam V2.0",
         style,
         posX, posY, winW, winH,
         nullptr, nullptr, m_hInst, this
     );
-    if (!m_hwnd) {
+    if (!m_hwnd || m_xamlInitFailed) {
+        if (m_hwnd) {
+            DestroyWindow(m_hwnd);
+            m_hwnd = nullptr;
+        }
         return false;
     }
+
+    m_toastWindow.Create(m_hInst, m_hwnd, WM_APP_SHOW_WINDOW);
 
     ApplyDwmTheme();
     ApplyAlwaysOnTop();
@@ -301,9 +325,13 @@ LRESULT AppWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
         case IDM_TRAY_PURGE:
             TriggerPurgeAsync(false);
             return 0;
+        case IDM_TRAY_GAMES:
+            ShowMainWindow();
+            SwitchToView(ActiveView::Games);
+            return 0;
         case IDM_TRAY_SETTINGS:
             ShowMainWindow();
-            SwitchToView(true);
+            SwitchToView(ActiveView::Settings);
             return 0;
         case IDM_TRAY_EXIT:
             m_closingForReal = true;
@@ -318,30 +346,66 @@ LRESULT AppWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
 
 void AppWindow::OnCreate() {
     m_dpi = GetDpiForWindow(m_hwnd);
+    if (m_dpi == 0) {
+        m_dpi = 96;
+    }
 
-    m_xamlManager = winrt_wux::Hosting::WindowsXamlManager::InitializeForCurrentThread();
-    m_xamlSource = winrt_wux::Hosting::DesktopWindowXamlSource();
+    try {
+        m_xamlManager = winrt_wux::Hosting::WindowsXamlManager::InitializeForCurrentThread();
+        m_xamlSource = winrt_wux::Hosting::DesktopWindowXamlSource();
 
-    auto native = m_xamlSource.as<IDesktopWindowXamlSourceNative>();
-    winrt::check_hresult(native->AttachToWindow(m_hwnd));
-    winrt::check_hresult(native->get_WindowHandle(&m_hwndXamlIsland));
+        auto native = m_xamlSource.try_as<IDesktopWindowXamlSourceNative>();
+        if (!native) {
+            winrt::throw_hresult(E_NOINTERFACE);
+        }
+        winrt::check_hresult(native->AttachToWindow(m_hwnd));
+        winrt::check_hresult(native->get_WindowHandle(&m_hwndXamlIsland));
 
-    const std::wstring xamlXml = LoadUtf8ResourceAsWide(m_hInst, IDR_XAML_LAYOUT);
-    auto parsed = winrt_wux::Markup::XamlReader::Load(winrt::hstring(xamlXml));
-    m_root = parsed.as<winrt_wux::FrameworkElement>();
-    m_xamlSource.Content(m_root);
+        const std::wstring xamlXml = LoadUtf8ResourceAsWide(m_hInst, IDR_XAML_LAYOUT);
+        if (xamlXml.empty()) {
+            winrt::throw_hresult(ERROR_RESOURCE_DATA_NOT_FOUND);
+        }
+        auto parsed = winrt_wux::Markup::XamlReader::Load(winrt::hstring(xamlXml));
+        m_root = parsed.try_as<winrt_wux::FrameworkElement>();
+        if (!m_root) {
+            winrt::throw_hresult(E_NOINTERFACE);
+        }
+        m_xamlSource.Content(m_root);
 
-    ResizeXamlIsland();
-    BindXamlControls();
-    LoadLogoSvgIntoUi();
-    HydrateSettingsUi();
+        ResizeXamlIsland();
+        BindXamlControls();
+        LoadLogoSvgIntoUi();
+        HydrateSettingsUi();
 
-    InitTrayIcon();
-    RefreshMemorySnapshot(false);
-    m_displayedPercent = m_targetPercent;
-    UpdateGaugeVisuals(m_displayedPercent);
+        InitTrayIcon();
+        RefreshMemorySnapshot(false);
+        RefreshGameProtectionUi(m_config.maximizeGameRam, true);
+        m_displayedPercent = m_targetPercent;
+        UpdateGaugeVisuals(m_displayedPercent);
 
-    SetTimer(m_hwnd, IDT_POLL_MEMORY, kPollIntervalMs, nullptr);
+        SetTimer(m_hwnd, IDT_POLL_MEMORY, kPollIntervalMs, nullptr);
+    } catch (const winrt::hresult_error& err) {
+        m_xamlInitFailed = true;
+        wchar_t buf[512]{};
+        _snwprintf_s(buf, _TRUNCATE,
+                     L"VRam V2.0 UI engine (XAML Islands) failed to start on this device.\n\n"
+                     L"Detail: %s (HRESULT 0x%08X)\n\n"
+                     L"Windows 10 build 18362+ (1903) or Windows 11 with XAML framework is required.",
+                     err.message().c_str(),
+                     static_cast<unsigned int>(err.code()));
+        MessageBoxW(m_hwnd, buf, L"VRam V2.0 - Startup Error", MB_OK | MB_ICONERROR);
+    } catch (const std::exception& ex) {
+        m_xamlInitFailed = true;
+        wchar_t wbuf[256]{};
+        MultiByteToWideChar(CP_UTF8, 0, ex.what(), -1, wbuf, 256);
+        MessageBoxW(m_hwnd, wbuf, L"VRam V2.0 - Startup Error", MB_OK | MB_ICONERROR);
+    } catch (...) {
+        m_xamlInitFailed = true;
+        MessageBoxW(m_hwnd,
+                    L"VRam V2.0 encountered an unexpected initialization error.",
+                    L"VRam V2.0 - Startup Error",
+                    MB_OK | MB_ICONERROR);
+    }
 }
 
 void AppWindow::OnDestroy() {
@@ -349,6 +413,9 @@ void AppWindow::OnDestroy() {
     KillTimer(m_hwnd, IDT_ARC_ANIM);
     KillTimer(m_hwnd, IDT_WINDOW_FADE);
     KillTimer(m_hwnd, IDT_STATUS_RESET);
+    KillTimer(m_hwnd, IDT_TOAST_COMPLETE);
+    m_pendingToastResult.reset();
+    m_toastWindow.Destroy();
     RemoveTrayIcon();
 
     if (m_xamlSource) {
@@ -366,7 +433,7 @@ void AppWindow::OnSize(UINT, UINT) {
 }
 
 void AppWindow::OnDpiChanged(UINT newDpi, const RECT* suggestedRect) {
-    m_dpi = newDpi;
+    m_dpi = (newDpi > 0) ? newDpi : 96;
     if (suggestedRect) {
         SetWindowPos(m_hwnd, nullptr,
                      suggestedRect->left, suggestedRect->top,
@@ -390,6 +457,14 @@ void AppWindow::OnTimer(UINT_PTR timerId) {
         } else {
             m_displayedPercent += diff * 0.22;
             UpdateGaugeVisuals(m_displayedPercent);
+        }
+    } else if (timerId == IDT_TOAST_COMPLETE) {
+        KillTimer(m_hwnd, IDT_TOAST_COMPLETE);
+        if (m_pendingToastResult) {
+            if (m_config.showNotifications) {
+                m_toastWindow.ShowCompleted(*m_pendingToastResult);
+            }
+            m_pendingToastResult.reset();
         }
     } else if (timerId == IDT_WINDOW_FADE) {
         if (m_fadeMode == FadeMode::In) {
@@ -462,16 +537,24 @@ void AppWindow::OnPurgeFinished(PurgeResult* rawResult) {
         wchar_t msg[160]{};
         if (res->freedBytes > 0) {
             std::wstring freedStr = MemoryEngine::FormatBytes(res->freedBytes);
-            std::swprintf(msg, 160, L"Freed %s (%u%% -> %u%%)",
-                          freedStr.c_str(), res->beforePercent, res->afterPercent);
             if (!m_isElevated && res->privilegeLimited) {
-                wcscat_s(msg, L" | Elevate for standby");
+                _snwprintf_s(msg, _TRUNCATE, L"Freed %s (%u%% -> %u%%) | Elevate for standby",
+                             freedStr.c_str(), res->beforePercent, res->afterPercent);
+            } else if (res->protectedProcesses > 0 && !res->activeGameName.empty()) {
+                _snwprintf_s(msg, _TRUNCATE, L"Freed %s | %s shielded",
+                             freedStr.c_str(), res->activeGameName.c_str());
+            } else {
+                _snwprintf_s(msg, _TRUNCATE, L"Freed %s (%u%% -> %u%%)",
+                             freedStr.c_str(), res->beforePercent, res->afterPercent);
             }
         } else if (!m_isElevated && res->privilegeLimited) {
-            std::swprintf(msg, 160, L"Trimmed %u processes | Elevate for standby",
-                          res->trimmedProcesses);
+            _snwprintf_s(msg, _TRUNCATE, L"Trimmed %u processes | Elevate for standby",
+                         res->trimmedProcesses);
+        } else if (res->protectedProcesses > 0 && !res->activeGameName.empty()) {
+            _snwprintf_s(msg, _TRUNCATE, L"Standby cleaned | %s kept maximized",
+                         res->activeGameName.c_str());
         } else {
-            std::swprintf(msg, 160, L"Already compact (%u%%)", res->afterPercent);
+            _snwprintf_s(msg, _TRUNCATE, L"Already compact (%u%%)", res->afterPercent);
         }
 
         m_purgeStatusText.Text(winrt::hstring(msg));
@@ -479,13 +562,23 @@ void AppWindow::OnPurgeFinished(PurgeResult* rawResult) {
             res->freedBytes > 0 ? RgbColor(109, 40, 217) : RgbColor(113, 113, 122)
         ));
 
-        if (m_config.showNotifications && !IsWindowVisible(m_hwnd)) {
-            ShowTrayBalloon(L"VRam V1.0", msg);
+        if (m_config.showNotifications) {
+            const uint64_t elapsed = GetTickCount64() - m_toastPurgeStartTick;
+            if (elapsed >= kToastMinRunMs) {
+                KillTimer(m_hwnd, IDT_TOAST_COMPLETE);
+                m_pendingToastResult.reset();
+                m_toastWindow.ShowCompleted(*res);
+            } else {
+                m_pendingToastResult = std::make_unique<PurgeResult>(*res);
+                SetTimer(m_hwnd, IDT_TOAST_COMPLETE,
+                         static_cast<UINT>(kToastMinRunMs - elapsed), nullptr);
+            }
         }
         SetTimer(m_hwnd, IDT_STATUS_RESET, kStatusResetMs, nullptr);
     }
 
     RefreshMemorySnapshot(false);
+    RefreshGameProtectionUi(false, m_activeView == ActiveView::Games);
 }
 
 void AppWindow::ApplyDwmTheme() {
@@ -534,166 +627,270 @@ void AppWindow::BindXamlControls() {
     m_gearSpinOutSb   = findSb(L"GearSpinOutStoryboard");
     m_openSettingsSb  = findSb(L"OpenSettingsStoryboard");
     m_openMainSb      = findSb(L"OpenMainStoryboard");
+    m_openGamesSb     = findSb(L"OpenGamesStoryboard");
 
-    m_titleBarDragArea       = find(L"TitleBarDragArea").as<winrt_ctrl::Grid>();
-    m_settingsHeaderDragArea = find(L"SettingsHeaderDragArea").as<winrt_ctrl::Grid>();
-    m_logoFallbackBadge      = find(L"LogoFallbackBadge").as<winrt_ctrl::Viewbox>();
-    m_logoSvgImage        = find(L"LogoSvgImage").as<winrt_ctrl::Image>();
-    m_winMinimizeBtn      = find(L"WinMinimizeButton").as<winrt_ctrl::Button>();
-    m_winCloseBtn         = find(L"WinCloseButton").as<winrt_ctrl::Button>();
+    m_titleBarDragArea       = find(L"TitleBarDragArea").try_as<winrt_ctrl::Grid>();
+    m_settingsHeaderDragArea = find(L"SettingsHeaderDragArea").try_as<winrt_ctrl::Grid>();
+    m_gameHeaderDragArea     = find(L"GameHeaderDragArea").try_as<winrt_ctrl::Grid>();
+    m_logoFallbackBadge      = find(L"LogoFallbackBadge").try_as<winrt_ctrl::Viewbox>();
+    m_logoSvgImage           = find(L"LogoSvgImage").try_as<winrt_ctrl::Image>();
+    m_winMinimizeBtn         = find(L"WinMinimizeButton").try_as<winrt_ctrl::Button>();
+    m_winCloseBtn            = find(L"WinCloseButton").try_as<winrt_ctrl::Button>();
 
-    m_mainView         = find(L"MainView").as<winrt_ctrl::Grid>();
-    m_settingsView     = find(L"SettingsView").as<winrt_ctrl::Grid>();
-    m_usageArcPath     = find(L"UsageArcPath").as<winrt_shp::Path>();
-    m_usagePercentText = find(L"UsagePercentText").as<winrt_ctrl::TextBlock>();
-    m_usageRatioText   = find(L"UsageRatioText").as<winrt_ctrl::TextBlock>();
-    m_inUseText        = find(L"InUseText").as<winrt_ctrl::TextBlock>();
-    m_availableText    = find(L"AvailableText").as<winrt_ctrl::TextBlock>();
-    m_cachedText       = find(L"CachedText").as<winrt_ctrl::TextBlock>();
-    m_purgeBtn         = find(L"PurgeButton").as<winrt_ctrl::Button>();
-    m_purgeBtnText     = find(L"PurgeButtonText").as<winrt_ctrl::TextBlock>();
-    m_purgeStatusText  = find(L"PurgeStatusText").as<winrt_ctrl::TextBlock>();
-    m_settingsBtn      = find(L"SettingsButton").as<winrt_ctrl::Button>();
-    m_minTrayBtn       = find(L"MinimizeTrayButton").as<winrt_ctrl::Button>();
+    m_mainView               = find(L"MainView").try_as<winrt_ctrl::Grid>();
+    m_settingsView           = find(L"SettingsView").try_as<winrt_ctrl::Grid>();
+    m_gameView               = find(L"GameView").try_as<winrt_ctrl::Grid>();
+    m_usageArcPath           = find(L"UsageArcPath").try_as<winrt_shp::Path>();
+    m_usagePercentText       = find(L"UsagePercentText").try_as<winrt_ctrl::TextBlock>();
+    m_usageRatioText         = find(L"UsageRatioText").try_as<winrt_ctrl::TextBlock>();
+    m_inUseText              = find(L"InUseText").try_as<winrt_ctrl::TextBlock>();
+    m_availableText          = find(L"AvailableText").try_as<winrt_ctrl::TextBlock>();
+    m_cachedText             = find(L"CachedText").try_as<winrt_ctrl::TextBlock>();
+    m_gameShieldBtn          = find(L"GameShieldButton").try_as<winrt_ctrl::Button>();
+    m_gameShieldTitleText    = find(L"GameShieldTitleText").try_as<winrt_ctrl::TextBlock>();
+    m_gameShieldSubText      = find(L"GameShieldSubText").try_as<winrt_ctrl::TextBlock>();
+    m_gameShieldBadgeBorder  = find(L"GameShieldBadgeBorder").try_as<winrt_ctrl::Border>();
+    m_gameShieldBadgeText    = find(L"GameShieldBadgeText").try_as<winrt_ctrl::TextBlock>();
+    m_purgeBtn               = find(L"PurgeButton").try_as<winrt_ctrl::Button>();
+    m_purgeBtnText           = find(L"PurgeButtonText").try_as<winrt_ctrl::TextBlock>();
+    m_purgeStatusText        = find(L"PurgeStatusText").try_as<winrt_ctrl::TextBlock>();
+    m_settingsBtn            = find(L"SettingsButton").try_as<winrt_ctrl::Button>();
+    m_minTrayBtn             = find(L"MinimizeTrayButton").try_as<winrt_ctrl::Button>();
 
-    m_backBtn              = find(L"BackButton").as<winrt_ctrl::Button>();
-    m_settingsScrollViewer = find(L"SettingsScrollViewer").as<winrt_ctrl::ScrollViewer>();
-    m_customScrollTrack    = find(L"CustomScrollTrack").as<winrt_ctrl::Grid>();
-    m_customScrollThumb    = find(L"CustomScrollThumb").as<winrt_ctrl::Border>();
-    m_scrollThumbTransform = find(L"ScrollThumbTransform").as<winrt_med::TranslateTransform>();
-    m_tglAutoStart       = find(L"ToggleAutoStart").as<winrt_ctrl::ToggleSwitch>();
-    m_tglStartMinimized  = find(L"ToggleStartMinimized").as<winrt_ctrl::ToggleSwitch>();
-    m_tglMinToTray       = find(L"ToggleMinimizeToTray").as<winrt_ctrl::ToggleSwitch>();
-    m_tglCloseToTray     = find(L"ToggleCloseToTray").as<winrt_ctrl::ToggleSwitch>();
-    m_trayModeLogoBtn    = find(L"TrayModeLogoBtn").as<winrt_ctrl::Button>();
-    m_trayModePercentBtn = find(L"TrayModePercentBtn").as<winrt_ctrl::Button>();
-    m_tglAlwaysOnTop     = find(L"ToggleAlwaysOnTop").as<winrt_ctrl::ToggleSwitch>();
-    m_tglWorkingSets     = find(L"ToggleWorkingSets").as<winrt_ctrl::ToggleSwitch>();
-    m_tglSystemCache     = find(L"ToggleSystemCache").as<winrt_ctrl::ToggleSwitch>();
-    m_tglStandbyList     = find(L"ToggleStandbyList").as<winrt_ctrl::ToggleSwitch>();
-    m_tglModifiedList    = find(L"ToggleModifiedList").as<winrt_ctrl::ToggleSwitch>();
-    m_tglAutoPurge       = find(L"ToggleAutoPurge").as<winrt_ctrl::ToggleSwitch>();
-    m_thresholdPrevBtn   = find(L"ThresholdPrevBtn").as<winrt_ctrl::Button>();
-    m_thresholdNextBtn   = find(L"ThresholdNextBtn").as<winrt_ctrl::Button>();
-    m_thresholdValueText = find(L"ThresholdValueText").as<winrt_ctrl::TextBlock>();
-    m_intervalPrevBtn    = find(L"IntervalPrevBtn").as<winrt_ctrl::Button>();
-    m_intervalNextBtn    = find(L"IntervalNextBtn").as<winrt_ctrl::Button>();
-    m_intervalValueText  = find(L"IntervalValueText").as<winrt_ctrl::TextBlock>();
-    m_tglNotifications   = find(L"ToggleNotifications").as<winrt_ctrl::ToggleSwitch>();
-    m_settingsElevateRow = find(L"SettingsElevateRow").as<winrt_ctrl::Grid>();
-    m_settingsElevateBtn = find(L"SettingsElevateButton").as<winrt_ctrl::Button>();
-    m_supportDevBtn      = find(L"SupportDevButton").as<winrt_ctrl::Button>();
+    m_gameBackBtn            = find(L"GameBackButton").try_as<winrt_ctrl::Button>();
+    m_boostGamesNowBtn       = find(L"BoostGamesNowBtn").try_as<winrt_ctrl::Button>();
+    m_gameScrollViewer       = find(L"GameScrollViewer").try_as<winrt_ctrl::ScrollViewer>();
+    m_gameScrollTrack        = find(L"GameScrollTrack").try_as<winrt_ctrl::Grid>();
+    m_gameScrollThumb        = find(L"GameScrollThumb").try_as<winrt_ctrl::Border>();
+    m_gameScrollThumbTransform = find(L"GameScrollThumbTransform").try_as<winrt_med::TranslateTransform>();
+    m_tglMaximizeGame        = find(L"ToggleMaximizeGame").try_as<winrt_ctrl::ToggleSwitch>();
+    m_browseGameBtn          = find(L"BrowseGameBtn").try_as<winrt_ctrl::Button>();
+    m_refreshProcsBtn        = find(L"RefreshProcsBtn").try_as<winrt_ctrl::Button>();
+    m_gameActionStatusText   = find(L"GameActionStatusText").try_as<winrt_ctrl::TextBlock>();
+    m_noGamesEmptyCard       = find(L"NoGamesEmptyCard").try_as<winrt_ctrl::Border>();
+    m_protectedGamesList     = find(L"ProtectedGamesList").try_as<winrt_ctrl::StackPanel>();
+    m_runningProcessesList   = find(L"RunningProcessesList").try_as<winrt_ctrl::StackPanel>();
+
+    m_backBtn                = find(L"BackButton").try_as<winrt_ctrl::Button>();
+    m_settingsScrollViewer   = find(L"SettingsScrollViewer").try_as<winrt_ctrl::ScrollViewer>();
+    m_customScrollTrack      = find(L"CustomScrollTrack").try_as<winrt_ctrl::Grid>();
+    m_customScrollThumb      = find(L"CustomScrollThumb").try_as<winrt_ctrl::Border>();
+    m_scrollThumbTransform   = find(L"ScrollThumbTransform").try_as<winrt_med::TranslateTransform>();
+    m_tglAutoStart           = find(L"ToggleAutoStart").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglStartMinimized      = find(L"ToggleStartMinimized").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglMinToTray           = find(L"ToggleMinimizeToTray").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglCloseToTray         = find(L"ToggleCloseToTray").try_as<winrt_ctrl::ToggleSwitch>();
+    m_trayModeLogoBtn        = find(L"TrayModeLogoBtn").try_as<winrt_ctrl::Button>();
+    m_trayModePercentBtn     = find(L"TrayModePercentBtn").try_as<winrt_ctrl::Button>();
+    m_tglAlwaysOnTop         = find(L"ToggleAlwaysOnTop").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglWorkingSets         = find(L"ToggleWorkingSets").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglSystemCache         = find(L"ToggleSystemCache").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglStandbyList         = find(L"ToggleStandbyList").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglModifiedList        = find(L"ToggleModifiedList").try_as<winrt_ctrl::ToggleSwitch>();
+    m_tglAutoPurge           = find(L"ToggleAutoPurge").try_as<winrt_ctrl::ToggleSwitch>();
+    m_thresholdPrevBtn       = find(L"ThresholdPrevBtn").try_as<winrt_ctrl::Button>();
+    m_thresholdNextBtn       = find(L"ThresholdNextBtn").try_as<winrt_ctrl::Button>();
+    m_thresholdValueText     = find(L"ThresholdValueText").try_as<winrt_ctrl::TextBlock>();
+    m_intervalPrevBtn        = find(L"IntervalPrevBtn").try_as<winrt_ctrl::Button>();
+    m_intervalNextBtn        = find(L"IntervalNextBtn").try_as<winrt_ctrl::Button>();
+    m_intervalValueText      = find(L"IntervalValueText").try_as<winrt_ctrl::TextBlock>();
+    m_tglNotifications       = find(L"ToggleNotifications").try_as<winrt_ctrl::ToggleSwitch>();
+    m_settingsElevateRow     = find(L"SettingsElevateRow").try_as<winrt_ctrl::Grid>();
+    m_settingsElevateBtn     = find(L"SettingsElevateButton").try_as<winrt_ctrl::Button>();
+    m_supportDevBtn          = find(L"SupportDevButton").try_as<winrt_ctrl::Button>();
 
     AttachDragHandlers(m_titleBarDragArea);
     AttachDragHandlers(m_settingsHeaderDragArea);
+    AttachDragHandlers(m_gameHeaderDragArea);
     AttachDragHandlers(m_mainView);
 
-    m_winMinimizeBtn.Click([this](auto&&, auto&&) {
-        if (m_config.minimizeToTray) {
+    if (m_winMinimizeBtn) {
+        m_winMinimizeBtn.Click([this](auto&&, auto&&) {
+            if (m_config.minimizeToTray) {
+                HideToTray();
+            } else {
+                MinimizeWindow();
+            }
+        });
+    }
+
+    if (m_winCloseBtn) {
+        m_winCloseBtn.Click([this](auto&&, auto&&) {
+            PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
+        });
+    }
+
+    if (m_settingsElevateRow) {
+        m_settingsElevateRow.Visibility(m_isElevated ? winrt_wux::Visibility::Collapsed : winrt_wux::Visibility::Visible);
+    }
+
+    if (m_settingsElevateBtn) {
+        m_settingsElevateBtn.Click([this](winrt::Windows::Foundation::IInspectable const&, winrt_wux::RoutedEventArgs const&) {
+            if (m_isElevated) return;
+            if (MemoryEngine::RestartElevated(false)) {
+                m_closingForReal = true;
+                DestroyWindow(m_hwnd);
+            }
+        });
+    }
+
+    if (m_supportDevBtn) {
+        m_supportDevBtn.Click([](auto&&, auto&&) {
+            ShellExecuteW(nullptr, L"open", L"https://sociabuzz.com/idnvinnmalay", nullptr, nullptr, SW_SHOWNORMAL);
+        });
+    }
+
+    if (m_settingsScrollViewer) {
+        m_settingsScrollViewer.ViewChanged([this](auto&&, auto&&) { UpdateCustomScrollThumb(); });
+        m_settingsScrollViewer.SizeChanged([this](auto&&, auto&&) { UpdateCustomScrollThumb(); });
+    }
+    if (m_customScrollTrack) {
+        m_customScrollTrack.SizeChanged([this](auto&&, auto&&) { UpdateCustomScrollThumb(); });
+    }
+
+    if (m_gameScrollViewer) {
+        m_gameScrollViewer.ViewChanged([this](auto&&, auto&&) { UpdateGameScrollThumb(); });
+        m_gameScrollViewer.SizeChanged([this](auto&&, auto&&) { UpdateGameScrollThumb(); });
+    }
+    if (m_gameScrollTrack) {
+        m_gameScrollTrack.SizeChanged([this](auto&&, auto&&) { UpdateGameScrollThumb(); });
+    }
+
+    if (m_purgeBtn) {
+        m_purgeBtn.Click([this](auto&&, auto&&) {
+            TriggerPurgeAsync(false);
+        });
+    }
+
+    if (m_gameShieldBtn) {
+        m_gameShieldBtn.Click([this](auto&&, auto&&) {
+            SwitchToView(ActiveView::Games);
+        });
+    }
+
+    if (m_gameBackBtn) {
+        m_gameBackBtn.Click([this](auto&&, auto&&) {
+            SwitchToView(ActiveView::Main);
+        });
+    }
+
+    if (m_browseGameBtn) {
+        m_browseGameBtn.Click([this](auto&&, auto&&) {
+            BrowseForGameExe();
+        });
+    }
+
+    if (m_refreshProcsBtn) {
+        m_refreshProcsBtn.Click([this](auto&&, auto&&) {
+            RefreshGameProtectionUi(false, true);
+        });
+    }
+
+    if (m_boostGamesNowBtn) {
+        m_boostGamesNowBtn.Click([this](auto&&, auto&&) {
+            MemoryEngine::EnableAvailablePrivileges();
+            RefreshGameProtectionUi(true, true);
+            if (m_gameActionStatusText) {
+                if (m_config.protectedGames.empty()) {
+                    m_gameActionStatusText.Text(L"Add at least one game .exe first to boost.");
+                } else if (m_lastGameStatus.anyRunning) {
+                    wchar_t buf[160]{};
+                    _snwprintf_s(buf, _TRUNCATE, L"Boosted %s (%s kept resident in RAM)",
+                                 m_lastGameStatus.primaryGameName.c_str(),
+                                 MemoryEngine::FormatBytes(m_lastGameStatus.combinedWorkingSetBytes).c_str());
+                    m_gameActionStatusText.Text(winrt::hstring(buf));
+                } else {
+                    m_gameActionStatusText.Text(L"Armed: game will auto-boost on launch.");
+                }
+            }
+        });
+    }
+
+    if (m_settingsBtn) {
+        m_settingsBtn.Click([this](auto&&, auto&&) {
+            SwitchToView(ActiveView::Settings);
+        });
+        m_settingsBtn.PointerEntered([this](auto&&, auto&&) {
+            if (m_gearSpinInSb) m_gearSpinInSb.Begin();
+        });
+        m_settingsBtn.PointerExited([this](auto&&, auto&&) {
+            if (m_gearSpinOutSb) m_gearSpinOutSb.Begin();
+        });
+    }
+
+    if (m_backBtn) {
+        m_backBtn.Click([this](auto&&, auto&&) {
+            SwitchToView(ActiveView::Main);
+        });
+    }
+
+    if (m_minTrayBtn) {
+        m_minTrayBtn.Click([this](auto&&, auto&&) {
             HideToTray();
-        } else {
-            MinimizeWindow();
-        }
-    });
-
-    m_winCloseBtn.Click([this](auto&&, auto&&) {
-        PostMessageW(m_hwnd, WM_CLOSE, 0, 0);
-    });
-
-    m_settingsElevateRow.Visibility(m_isElevated ? winrt_wux::Visibility::Collapsed : winrt_wux::Visibility::Visible);
-
-    m_settingsElevateBtn.Click([this](winrt::Windows::Foundation::IInspectable const&, winrt_wux::RoutedEventArgs const&) {
-        if (m_isElevated) return;
-        if (MemoryEngine::RestartElevated(false)) {
-            m_closingForReal = true;
-            DestroyWindow(m_hwnd);
-        }
-    });
-
-    m_supportDevBtn.Click([](auto&&, auto&&) {
-        ShellExecuteW(nullptr, L"open", L"https://sociabuzz.com/idnvinnmalay", nullptr, nullptr, SW_SHOWNORMAL);
-    });
-
-    m_settingsScrollViewer.ViewChanged([this](auto&&, auto&&) {
-        UpdateCustomScrollThumb();
-    });
-    m_settingsScrollViewer.SizeChanged([this](auto&&, auto&&) {
-        UpdateCustomScrollThumb();
-    });
-    m_customScrollTrack.SizeChanged([this](auto&&, auto&&) {
-        UpdateCustomScrollThumb();
-    });
-
-    m_purgeBtn.Click([this](auto&&, auto&&) {
-        TriggerPurgeAsync(false);
-    });
-
-    m_settingsBtn.Click([this](auto&&, auto&&) {
-        SwitchToView(true);
-    });
-    m_settingsBtn.PointerEntered([this](auto&&, auto&&) {
-        if (m_gearSpinInSb) m_gearSpinInSb.Begin();
-    });
-    m_settingsBtn.PointerExited([this](auto&&, auto&&) {
-        if (m_gearSpinOutSb) m_gearSpinOutSb.Begin();
-    });
-
-    m_backBtn.Click([this](auto&&, auto&&) {
-        SwitchToView(false);
-    });
-
-    m_minTrayBtn.Click([this](auto&&, auto&&) {
-        HideToTray();
-    });
+        });
+    }
 
     auto onToggleChanged = [this](auto&&, auto&&) {
         if (!m_hydratingUi) SaveAndApplyConfig();
     };
 
-    m_tglAutoStart.Toggled(onToggleChanged);
-    m_tglStartMinimized.Toggled(onToggleChanged);
-    m_tglMinToTray.Toggled(onToggleChanged);
-    m_tglCloseToTray.Toggled(onToggleChanged);
-    m_tglAlwaysOnTop.Toggled(onToggleChanged);
-    m_tglWorkingSets.Toggled(onToggleChanged);
-    m_tglSystemCache.Toggled(onToggleChanged);
-    m_tglStandbyList.Toggled(onToggleChanged);
-    m_tglModifiedList.Toggled(onToggleChanged);
-    m_tglAutoPurge.Toggled(onToggleChanged);
-    m_tglNotifications.Toggled(onToggleChanged);
+    if (m_tglAutoStart)      m_tglAutoStart.Toggled(onToggleChanged);
+    if (m_tglStartMinimized) m_tglStartMinimized.Toggled(onToggleChanged);
+    if (m_tglMinToTray)      m_tglMinToTray.Toggled(onToggleChanged);
+    if (m_tglCloseToTray)    m_tglCloseToTray.Toggled(onToggleChanged);
+    if (m_tglAlwaysOnTop)    m_tglAlwaysOnTop.Toggled(onToggleChanged);
+    if (m_tglWorkingSets)    m_tglWorkingSets.Toggled(onToggleChanged);
+    if (m_tglSystemCache)    m_tglSystemCache.Toggled(onToggleChanged);
+    if (m_tglStandbyList)    m_tglStandbyList.Toggled(onToggleChanged);
+    if (m_tglModifiedList)   m_tglModifiedList.Toggled(onToggleChanged);
+    if (m_tglAutoPurge)      m_tglAutoPurge.Toggled(onToggleChanged);
+    if (m_tglNotifications)  m_tglNotifications.Toggled(onToggleChanged);
+    if (m_tglMaximizeGame)   m_tglMaximizeGame.Toggled(onToggleChanged);
 
-    m_trayModeLogoBtn.Click([this](auto&&, auto&&) {
-        m_config.trayStyle = L"logo";
-        UpdateCustomOptionPills();
-        SaveAndApplyConfig();
-    });
-    m_trayModePercentBtn.Click([this](auto&&, auto&&) {
-        m_config.trayStyle = L"percent";
-        UpdateCustomOptionPills();
-        SaveAndApplyConfig();
-    });
+    if (m_trayModeLogoBtn) {
+        m_trayModeLogoBtn.Click([this](auto&&, auto&&) {
+            m_config.trayStyle = L"logo";
+            UpdateCustomOptionPills();
+            SaveAndApplyConfig();
+        });
+    }
+    if (m_trayModePercentBtn) {
+        m_trayModePercentBtn.Click([this](auto&&, auto&&) {
+            m_config.trayStyle = L"percent";
+            UpdateCustomOptionPills();
+            SaveAndApplyConfig();
+        });
+    }
 
-    m_thresholdPrevBtn.Click([this](auto&&, auto&&) {
-        m_config.autoPurgeThreshold = StepOption(kThresholds, m_config.autoPurgeThreshold, -1);
-        UpdateCustomOptionPills();
-        SaveAndApplyConfig();
-    });
-    m_thresholdNextBtn.Click([this](auto&&, auto&&) {
-        m_config.autoPurgeThreshold = StepOption(kThresholds, m_config.autoPurgeThreshold, +1);
-        UpdateCustomOptionPills();
-        SaveAndApplyConfig();
-    });
+    if (m_thresholdPrevBtn) {
+        m_thresholdPrevBtn.Click([this](auto&&, auto&&) {
+            m_config.autoPurgeThreshold = StepOption(kThresholds, m_config.autoPurgeThreshold, -1);
+            UpdateCustomOptionPills();
+            SaveAndApplyConfig();
+        });
+    }
+    if (m_thresholdNextBtn) {
+        m_thresholdNextBtn.Click([this](auto&&, auto&&) {
+            m_config.autoPurgeThreshold = StepOption(kThresholds, m_config.autoPurgeThreshold, +1);
+            UpdateCustomOptionPills();
+            SaveAndApplyConfig();
+        });
+    }
 
-    m_intervalPrevBtn.Click([this](auto&&, auto&&) {
-        m_config.autoPurgeIntervalMinutes = StepOption(kIntervals, m_config.autoPurgeIntervalMinutes, -1);
-        UpdateCustomOptionPills();
-        SaveAndApplyConfig();
-    });
-    m_intervalNextBtn.Click([this](auto&&, auto&&) {
-        m_config.autoPurgeIntervalMinutes = StepOption(kIntervals, m_config.autoPurgeIntervalMinutes, +1);
-        UpdateCustomOptionPills();
-        SaveAndApplyConfig();
-    });
+    if (m_intervalPrevBtn) {
+        m_intervalPrevBtn.Click([this](auto&&, auto&&) {
+            m_config.autoPurgeIntervalMinutes = StepOption(kIntervals, m_config.autoPurgeIntervalMinutes, -1);
+            UpdateCustomOptionPills();
+            SaveAndApplyConfig();
+        });
+    }
+    if (m_intervalNextBtn) {
+        m_intervalNextBtn.Click([this](auto&&, auto&&) {
+            m_config.autoPurgeIntervalMinutes = StepOption(kIntervals, m_config.autoPurgeIntervalMinutes, +1);
+            UpdateCustomOptionPills();
+            SaveAndApplyConfig();
+        });
+    }
 }
 
 void AppWindow::AttachDragHandlers(const winrt_wux::UIElement& element) {
@@ -808,7 +1005,7 @@ void AppWindow::UpdateCustomOptionPills() {
 
     if (m_thresholdValueText) {
         wchar_t buf[16]{};
-        std::swprintf(buf, 16, L"%d%%", m_config.autoPurgeThreshold);
+        _snwprintf_s(buf, _TRUNCATE, L"%d%%", m_config.autoPurgeThreshold);
         m_thresholdValueText.Text(winrt::hstring(buf));
     }
 
@@ -817,7 +1014,7 @@ void AppWindow::UpdateCustomOptionPills() {
             m_intervalValueText.Text(L"Off");
         } else {
             wchar_t buf[16]{};
-            std::swprintf(buf, 16, L"%dm", m_config.autoPurgeIntervalMinutes);
+            _snwprintf_s(buf, _TRUNCATE, L"%dm", m_config.autoPurgeIntervalMinutes);
             m_intervalValueText.Text(winrt::hstring(buf));
         }
     }
@@ -826,19 +1023,20 @@ void AppWindow::UpdateCustomOptionPills() {
 void AppWindow::HydrateSettingsUi() {
     m_hydratingUi = true;
 
-    m_tglAutoStart.IsOn(m_config.autoStart);
-    m_tglStartMinimized.IsOn(m_config.startMinimized);
-    m_tglMinToTray.IsOn(m_config.minimizeToTray);
-    m_tglCloseToTray.IsOn(m_config.closeToTray);
-    m_tglAlwaysOnTop.IsOn(m_config.alwaysOnTop);
+    if (m_tglAutoStart)      m_tglAutoStart.IsOn(m_config.autoStart);
+    if (m_tglStartMinimized) m_tglStartMinimized.IsOn(m_config.startMinimized);
+    if (m_tglMinToTray)      m_tglMinToTray.IsOn(m_config.minimizeToTray);
+    if (m_tglCloseToTray)    m_tglCloseToTray.IsOn(m_config.closeToTray);
+    if (m_tglAlwaysOnTop)    m_tglAlwaysOnTop.IsOn(m_config.alwaysOnTop);
 
-    m_tglWorkingSets.IsOn(m_config.purgeWorkingSets);
-    m_tglSystemCache.IsOn(m_config.purgeSystemCache);
-    m_tglStandbyList.IsOn(m_config.purgeStandbyList);
-    m_tglModifiedList.IsOn(m_config.purgeModifiedList);
+    if (m_tglWorkingSets)    m_tglWorkingSets.IsOn(m_config.purgeWorkingSets);
+    if (m_tglSystemCache)    m_tglSystemCache.IsOn(m_config.purgeSystemCache);
+    if (m_tglStandbyList)    m_tglStandbyList.IsOn(m_config.purgeStandbyList);
+    if (m_tglModifiedList)   m_tglModifiedList.IsOn(m_config.purgeModifiedList);
 
-    m_tglAutoPurge.IsOn(m_config.autoPurgeEnabled);
-    m_tglNotifications.IsOn(m_config.showNotifications);
+    if (m_tglAutoPurge)      m_tglAutoPurge.IsOn(m_config.autoPurgeEnabled);
+    if (m_tglNotifications)  m_tglNotifications.IsOn(m_config.showNotifications);
+    if (m_tglMaximizeGame)   m_tglMaximizeGame.IsOn(m_config.maximizeGameRam);
 
     UpdateCustomOptionPills();
     m_hydratingUi = false;
@@ -847,24 +1045,26 @@ void AppWindow::HydrateSettingsUi() {
 }
 
 void AppWindow::SaveAndApplyConfig() {
-    m_config.autoStart        = m_tglAutoStart.IsOn();
-    m_config.startMinimized   = m_tglStartMinimized.IsOn();
-    m_config.minimizeToTray   = m_tglMinToTray.IsOn();
-    m_config.closeToTray      = m_tglCloseToTray.IsOn();
-    m_config.alwaysOnTop      = m_tglAlwaysOnTop.IsOn();
+    if (m_tglAutoStart)      m_config.autoStart        = m_tglAutoStart.IsOn();
+    if (m_tglStartMinimized) m_config.startMinimized   = m_tglStartMinimized.IsOn();
+    if (m_tglMinToTray)      m_config.minimizeToTray   = m_tglMinToTray.IsOn();
+    if (m_tglCloseToTray)    m_config.closeToTray      = m_tglCloseToTray.IsOn();
+    if (m_tglAlwaysOnTop)    m_config.alwaysOnTop      = m_tglAlwaysOnTop.IsOn();
 
-    m_config.purgeWorkingSets  = m_tglWorkingSets.IsOn();
-    m_config.purgeSystemCache  = m_tglSystemCache.IsOn();
-    m_config.purgeStandbyList  = m_tglStandbyList.IsOn();
-    m_config.purgeModifiedList = m_tglModifiedList.IsOn();
+    if (m_tglWorkingSets)    m_config.purgeWorkingSets  = m_tglWorkingSets.IsOn();
+    if (m_tglSystemCache)    m_config.purgeSystemCache  = m_tglSystemCache.IsOn();
+    if (m_tglStandbyList)    m_config.purgeStandbyList  = m_tglStandbyList.IsOn();
+    if (m_tglModifiedList)   m_config.purgeModifiedList = m_tglModifiedList.IsOn();
 
-    m_config.autoPurgeEnabled  = m_tglAutoPurge.IsOn();
-    m_config.showNotifications = m_tglNotifications.IsOn();
+    if (m_tglAutoPurge)      m_config.autoPurgeEnabled  = m_tglAutoPurge.IsOn();
+    if (m_tglNotifications)  m_config.showNotifications = m_tglNotifications.IsOn();
+    if (m_tglMaximizeGame)   m_config.maximizeGameRam   = m_tglMaximizeGame.IsOn();
 
     ConfigManager::SetAutoStartup(m_config.autoStart, m_config.startMinimized);
     ConfigManager::Save(m_config);
     ApplyAlwaysOnTop();
     UpdateTrayIcon(m_lastSnapshot, true);
+    RefreshGameProtectionUi(m_config.maximizeGameRam, false);
 
     if (!m_purgeRunning.load()) {
         UpdateIdlePurgeStatusText();
@@ -880,45 +1080,63 @@ void AppWindow::UpdateIdlePurgeStatusText() {
     ));
 }
 
-void AppWindow::UpdateCustomScrollThumb() {
-    if (!m_settingsScrollViewer || !m_customScrollTrack || !m_customScrollThumb || !m_scrollThumbTransform) return;
+void AppWindow::UpdateScrollThumbFor(
+    const winrt_ctrl::ScrollViewer& sv,
+    const winrt_ctrl::Grid& track,
+    const winrt_ctrl::Border& thumb,
+    const winrt_med::TranslateTransform& tt) {
+    if (!sv || !track || !thumb || !tt) return;
 
-    const double extent = m_settingsScrollViewer.ExtentHeight();
-    const double viewport = m_settingsScrollViewer.ViewportHeight();
-    const double trackH = m_customScrollTrack.ActualHeight();
+    const double extent = sv.ExtentHeight();
+    const double viewport = sv.ViewportHeight();
+    const double trackH = track.ActualHeight();
     if (extent <= viewport || viewport <= 0.0 || trackH <= 0.0) {
-        m_customScrollThumb.Visibility(winrt_wux::Visibility::Collapsed);
+        thumb.Visibility(winrt_wux::Visibility::Collapsed);
         return;
     }
 
-    m_customScrollThumb.Visibility(winrt_wux::Visibility::Visible);
+    thumb.Visibility(winrt_wux::Visibility::Visible);
     const double thumbH = std::max(28.0, trackH * (viewport / extent));
-    m_customScrollThumb.Height(thumbH);
+    thumb.Height(thumbH);
 
     const double maxOffset = extent - viewport;
     const double ratio = (maxOffset > 0.0)
-        ? std::clamp(m_settingsScrollViewer.VerticalOffset() / maxOffset, 0.0, 1.0)
+        ? std::clamp(sv.VerticalOffset() / maxOffset, 0.0, 1.0)
         : 0.0;
-    m_scrollThumbTransform.Y(ratio * (trackH - thumbH));
+    tt.Y(ratio * (trackH - thumbH));
 }
 
-void AppWindow::SwitchToView(bool showSettings) {
-    if (m_showingSettings == showSettings) return;
-    m_showingSettings = showSettings;
+void AppWindow::UpdateCustomScrollThumb() {
+    UpdateScrollThumbFor(m_settingsScrollViewer, m_customScrollTrack, m_customScrollThumb, m_scrollThumbTransform);
+}
 
-    if (showSettings) {
-        m_mainView.Visibility(winrt_wux::Visibility::Collapsed);
-        m_settingsView.Visibility(winrt_wux::Visibility::Visible);
+void AppWindow::UpdateGameScrollThumb() {
+    UpdateScrollThumbFor(m_gameScrollViewer, m_gameScrollTrack, m_gameScrollThumb, m_gameScrollThumbTransform);
+}
+
+void AppWindow::SwitchToView(ActiveView view) {
+    if (m_activeView == view) return;
+    m_activeView = view;
+
+    if (m_mainView) {
+        m_mainView.Visibility(view == ActiveView::Main ? winrt_wux::Visibility::Visible : winrt_wux::Visibility::Collapsed);
+    }
+    if (m_settingsView) {
+        m_settingsView.Visibility(view == ActiveView::Settings ? winrt_wux::Visibility::Visible : winrt_wux::Visibility::Collapsed);
+    }
+    if (m_gameView) {
+        m_gameView.Visibility(view == ActiveView::Games ? winrt_wux::Visibility::Visible : winrt_wux::Visibility::Collapsed);
+    }
+
+    if (view == ActiveView::Settings) {
         UpdateCustomScrollThumb();
-        if (m_openSettingsSb) {
-            m_openSettingsSb.Begin();
-        }
+        if (m_openSettingsSb) m_openSettingsSb.Begin();
+    } else if (view == ActiveView::Games) {
+        RefreshGameProtectionUi(m_config.maximizeGameRam, true);
+        UpdateGameScrollThumb();
+        if (m_openGamesSb) m_openGamesSb.Begin();
     } else {
-        m_settingsView.Visibility(winrt_wux::Visibility::Collapsed);
-        m_mainView.Visibility(winrt_wux::Visibility::Visible);
-        if (m_openMainSb) {
-            m_openMainSb.Begin();
-        }
+        if (m_openMainSb) m_openMainSb.Begin();
     }
 }
 
@@ -946,7 +1164,7 @@ void AppWindow::StartWindowFade(FadeMode mode) {
             ApplyLayeredAlpha(0);
             ShowWindow(m_hwnd, SW_RESTORE);
             SetForegroundWindow(m_hwnd);
-            if (!m_showingSettings && m_startupSloganSb) {
+            if (m_activeView == ActiveView::Main && m_startupSloganSb) {
                 m_startupSloganSb.Begin();
             }
         }
@@ -989,10 +1207,10 @@ void AppWindow::RefreshMemorySnapshot(bool checkAutoPurge) {
     const std::wstring availStr = MemoryEngine::FormatBytes(snap.availBytes);
     const std::wstring cacheStr = MemoryEngine::FormatBytes(snap.cachedBytes);
 
-    m_usageRatioText.Text(winrt::hstring(usedStr + L" / " + totalStr));
-    m_inUseText.Text(winrt::hstring(usedStr));
-    m_availableText.Text(winrt::hstring(availStr));
-    m_cachedText.Text(winrt::hstring(cacheStr));
+    if (m_usageRatioText) m_usageRatioText.Text(winrt::hstring(usedStr + L" / " + totalStr));
+    if (m_inUseText)      m_inUseText.Text(winrt::hstring(usedStr));
+    if (m_availableText)  m_availableText.Text(winrt::hstring(availStr));
+    if (m_cachedText)     m_cachedText.Text(winrt::hstring(cacheStr));
 
     m_targetPercent = static_cast<double>(snap.usagePercent);
     if (std::fabs(m_displayedPercent - m_targetPercent) > 0.25) {
@@ -1002,6 +1220,10 @@ void AppWindow::RefreshMemorySnapshot(bool checkAutoPurge) {
     }
 
     UpdateTrayIcon(snap, false);
+
+    ++m_gameBoostTickDivider;
+    const bool applyBoostThisTick = m_config.maximizeGameRam && ((m_gameBoostTickDivider % 3) == 1);
+    RefreshGameProtectionUi(applyBoostThisTick, false);
 
     if (checkAutoPurge && !m_purgeRunning.load()) {
         const uint64_t nowMs = GetTickCount64();
@@ -1025,7 +1247,7 @@ void AppWindow::UpdateGaugeVisuals(double percent) {
 
     if (m_usagePercentText) {
         wchar_t pctBuf[16]{};
-        std::swprintf(pctBuf, 16, L"%u%%", static_cast<unsigned>(std::lround(clamped)));
+        _snwprintf_s(pctBuf, _TRUNCATE, L"%u%%", static_cast<unsigned>(std::lround(clamped)));
         m_usagePercentText.Text(winrt::hstring(pctBuf));
     }
 
@@ -1073,6 +1295,9 @@ void AppWindow::TriggerPurgeAsync(bool fromAuto) {
     }
 
     KillTimer(m_hwnd, IDT_STATUS_RESET);
+    KillTimer(m_hwnd, IDT_TOAST_COMPLETE);
+    m_pendingToastResult.reset();
+
     if (m_purgePulseSb) {
         m_purgePulseSb.Begin();
     }
@@ -1083,11 +1308,18 @@ void AppWindow::TriggerPurgeAsync(bool fromAuto) {
         m_purgeStatusText.Foreground(winrt_med::SolidColorBrush(RgbColor(113, 113, 122)));
     }
 
+    if (m_config.showNotifications) {
+        m_toastPurgeStartTick = GetTickCount64();
+        m_toastWindow.ShowPurging(m_lastSnapshot, m_lastGameStatus);
+    }
+
     PurgeOptions opts{};
-    opts.workingSets  = m_config.purgeWorkingSets;
-    opts.systemCache  = m_config.purgeSystemCache;
-    opts.standbyList  = m_config.purgeStandbyList;
-    opts.modifiedList = m_config.purgeModifiedList;
+    opts.workingSets     = m_config.purgeWorkingSets;
+    opts.systemCache     = m_config.purgeSystemCache;
+    opts.standbyList     = m_config.purgeStandbyList;
+    opts.modifiedList    = m_config.purgeModifiedList;
+    opts.maximizeGameRam = m_config.maximizeGameRam;
+    opts.protectedGames  = m_config.protectedGames;
 
     HWND targetHwnd = m_hwnd;
     std::thread([targetHwnd, opts]() {
@@ -1096,6 +1328,259 @@ void AppWindow::TriggerPurgeAsync(bool fromAuto) {
             delete result;
         }
     }).detach();
+}
+
+void AppWindow::AddProtectedGameExe(const std::wstring& exeNameOrPath) {
+    std::wstring clean = NormalizeExeFilename(exeNameOrPath);
+    if (clean.empty()) return;
+
+    for (const auto& existing : m_config.protectedGames) {
+        if (_wcsicmp(existing.c_str(), clean.c_str()) == 0) {
+            if (m_gameActionStatusText) {
+                m_gameActionStatusText.Text(winrt::hstring(clean + L" is already in Game Shield."));
+            }
+            return;
+        }
+    }
+
+    m_config.protectedGames.push_back(clean);
+    ConfigManager::Save(m_config);
+    MemoryEngine::EnableAvailablePrivileges();
+    RefreshGameProtectionUi(m_config.maximizeGameRam, true);
+
+    if (m_gameActionStatusText) {
+        m_gameActionStatusText.Text(winrt::hstring(L"Protected: " + clean + L" (excluded from purge & RAM prioritized)."));
+    }
+}
+
+void AppWindow::RemoveProtectedGameExe(const std::wstring& exeName) {
+    auto it = std::remove_if(m_config.protectedGames.begin(), m_config.protectedGames.end(),
+        [&](const std::wstring& item) {
+            return _wcsicmp(item.c_str(), exeName.c_str()) == 0;
+        });
+    if (it == m_config.protectedGames.end()) return;
+    m_config.protectedGames.erase(it, m_config.protectedGames.end());
+    ConfigManager::Save(m_config);
+    RefreshGameProtectionUi(false, true);
+
+    if (m_gameActionStatusText) {
+        m_gameActionStatusText.Text(winrt::hstring(L"Removed " + exeName + L" from Game Shield."));
+    }
+}
+
+void AppWindow::BrowseForGameExe() {
+    wchar_t fileBuf[MAX_PATH * 2]{};
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = L"Game Executables (*.exe)\0*.exe\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = fileBuf;
+    ofn.nMaxFile = ARRAYSIZE(fileBuf);
+    ofn.lpstrTitle = L"Select Game Executable to Protect";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (GetOpenFileNameW(&ofn)) {
+        AddProtectedGameExe(fileBuf);
+    }
+}
+
+void AppWindow::RefreshGameProtectionUi(bool applyBoostNow, bool rebuildLists) {
+    m_lastGameStatus = MemoryEngine::QueryAndApplyGameProtection(m_config.protectedGames, applyBoostNow);
+
+    if (m_gameShieldTitleText && m_gameShieldSubText && m_gameShieldBadgeBorder && m_gameShieldBadgeText) {
+        if (m_lastGameStatus.anyRunning) {
+            m_gameShieldTitleText.Text(winrt::hstring(m_lastGameStatus.primaryGameName + L" Protected"));
+            const std::wstring sub = MemoryEngine::FormatBytes(m_lastGameStatus.combinedWorkingSetBytes) +
+                (m_config.maximizeGameRam ? L" • Max RAM & Excluded" : L" • Purge Excluded");
+            m_gameShieldSubText.Text(winrt::hstring(sub));
+            m_gameShieldBadgeBorder.Background(winrt_med::SolidColorBrush(RgbColor(109, 40, 217)));
+            m_gameShieldBadgeText.Text(L"ACTIVE");
+            m_gameShieldBadgeText.Foreground(winrt_med::SolidColorBrush(RgbColor(255, 255, 255)));
+        } else if (!m_config.protectedGames.empty()) {
+            wchar_t titleBuf[64]{};
+            _snwprintf_s(titleBuf, _TRUNCATE, L"Game Shield (%zu)", m_config.protectedGames.size());
+            m_gameShieldTitleText.Text(winrt::hstring(titleBuf));
+            m_gameShieldSubText.Text(winrt::hstring(L"Standby: " + m_config.protectedGames.front() +
+                (m_config.protectedGames.size() > 1 ? L" + more" : L"")));
+            m_gameShieldBadgeBorder.Background(winrt_med::SolidColorBrush(RgbColor(243, 238, 255)));
+            m_gameShieldBadgeText.Text(L"Armed");
+            m_gameShieldBadgeText.Foreground(winrt_med::SolidColorBrush(RgbColor(109, 40, 217)));
+        } else {
+            m_gameShieldTitleText.Text(L"Game Shield");
+            m_gameShieldSubText.Text(L"Select game to skip purge");
+            m_gameShieldBadgeBorder.Background(winrt_med::SolidColorBrush(RgbColor(243, 238, 255)));
+            m_gameShieldBadgeText.Text(L"Select");
+            m_gameShieldBadgeText.Foreground(winrt_med::SolidColorBrush(RgbColor(109, 40, 217)));
+        }
+    }
+
+    if (rebuildLists) {
+        RebuildGameListsUi(MemoryEngine::ListRunningProcesses());
+    }
+}
+
+void AppWindow::RebuildGameListsUi(const std::vector<RunningProcessInfo>& runningProcs) {
+    if (m_noGamesEmptyCard) {
+        m_noGamesEmptyCard.Visibility(m_config.protectedGames.empty()
+            ? winrt_wux::Visibility::Visible
+            : winrt_wux::Visibility::Collapsed);
+    }
+
+    auto findRunningInfo = [&](const std::wstring& exe) -> const RunningProcessInfo* {
+        for (const auto& rp : runningProcs) {
+            if (_wcsicmp(rp.exeName.c_str(), exe.c_str()) == 0) {
+                return &rp;
+            }
+        }
+        return nullptr;
+    };
+
+    if (m_protectedGamesList) {
+        m_protectedGamesList.Children().Clear();
+        for (const auto& exe : m_config.protectedGames) {
+            const RunningProcessInfo* live = findRunningInfo(exe);
+
+            winrt_ctrl::Border card;
+            card.Background(winrt_med::SolidColorBrush(live ? RgbColor(245, 243, 255) : RgbColor(250, 250, 252)));
+            card.BorderBrush(winrt_med::SolidColorBrush(live ? RgbColor(216, 180, 254) : RgbColor(228, 228, 231)));
+            card.BorderThickness(winrt_wux::ThicknessHelper::FromUniformLength(1.0));
+            card.CornerRadius(winrt_wux::CornerRadiusHelper::FromUniformRadius(7.0));
+            card.Padding(winrt_wux::ThicknessHelper::FromLengths(10.0, 6.0, 6.0, 6.0));
+
+            winrt_ctrl::Grid row;
+            winrt_ctrl::ColumnDefinition col0;
+            col0.Width(winrt_wux::GridLengthHelper::FromValueAndType(1.0, winrt_wux::GridUnitType::Star));
+            winrt_ctrl::ColumnDefinition col1;
+            col1.Width(winrt_wux::GridLengthHelper::Auto());
+            row.ColumnDefinitions().Append(col0);
+            row.ColumnDefinitions().Append(col1);
+
+            winrt_ctrl::StackPanel info;
+            info.VerticalAlignment(winrt_wux::VerticalAlignment::Center);
+
+            winrt_ctrl::TextBlock nameTxt;
+            nameTxt.Text(winrt::hstring(exe));
+            nameTxt.FontSize(12.0);
+            nameTxt.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            nameTxt.Foreground(winrt_med::SolidColorBrush(RgbColor(24, 24, 27)));
+            nameTxt.TextTrimming(winrt_wux::TextTrimming::CharacterEllipsis);
+
+            winrt_ctrl::TextBlock subTxt;
+            subTxt.FontSize(10.5);
+            if (live) {
+                subTxt.Text(winrt::hstring(L"Running • " + MemoryEngine::FormatBytes(live->totalWorkingSetBytes) +
+                    (m_config.maximizeGameRam ? L" (Maximized)" : L" (Protected)")));
+                subTxt.Foreground(winrt_med::SolidColorBrush(RgbColor(109, 40, 217)));
+            } else {
+                subTxt.Text(L"Not running • Protected when launched");
+                subTxt.Foreground(winrt_med::SolidColorBrush(RgbColor(113, 113, 122)));
+            }
+
+            info.Children().Append(nameTxt);
+            info.Children().Append(subTxt);
+            winrt_ctrl::Grid::SetColumn(info, 0);
+
+            winrt_ctrl::Button removeBtn;
+            removeBtn.Content(winrt::box_value(L"Remove"));
+            removeBtn.FontSize(10.5);
+            removeBtn.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            removeBtn.Padding(winrt_wux::ThicknessHelper::FromLengths(8.0, 3.0, 8.0, 3.0));
+            removeBtn.Background(winrt_med::SolidColorBrush(RgbColor(255, 255, 255)));
+            removeBtn.BorderBrush(winrt_med::SolidColorBrush(RgbColor(228, 228, 231)));
+            removeBtn.BorderThickness(winrt_wux::ThicknessHelper::FromUniformLength(1.0));
+            removeBtn.Foreground(winrt_med::SolidColorBrush(RgbColor(185, 28, 28)));
+            removeBtn.CornerRadius(winrt_wux::CornerRadiusHelper::FromUniformRadius(5.0));
+            removeBtn.VerticalAlignment(winrt_wux::VerticalAlignment::Center);
+            winrt_wux::Automation::AutomationProperties::SetName(removeBtn, winrt::hstring(L"Remove " + exe));
+            removeBtn.Click([this, exe](auto&&, auto&&) {
+                RemoveProtectedGameExe(exe);
+            });
+            winrt_ctrl::Grid::SetColumn(removeBtn, 1);
+
+            row.Children().Append(info);
+            row.Children().Append(removeBtn);
+            card.Child(row);
+            m_protectedGamesList.Children().Append(card);
+        }
+    }
+
+    if (m_runningProcessesList) {
+        m_runningProcessesList.Children().Clear();
+        int shownCount = 0;
+        for (const auto& proc : runningProcs) {
+            bool alreadyProtected = false;
+            for (const auto& pg : m_config.protectedGames) {
+                if (_wcsicmp(pg.c_str(), proc.exeName.c_str()) == 0) {
+                    alreadyProtected = true;
+                    break;
+                }
+            }
+            if (alreadyProtected) continue;
+            if (shownCount >= 18) break;
+            ++shownCount;
+
+            winrt_ctrl::Border card;
+            card.Background(winrt_med::SolidColorBrush(RgbColor(255, 255, 255)));
+            card.BorderBrush(winrt_med::SolidColorBrush(RgbColor(239, 239, 244)));
+            card.BorderThickness(winrt_wux::ThicknessHelper::FromUniformLength(1.0));
+            card.CornerRadius(winrt_wux::CornerRadiusHelper::FromUniformRadius(7.0));
+            card.Padding(winrt_wux::ThicknessHelper::FromLengths(10.0, 5.0, 6.0, 5.0));
+
+            winrt_ctrl::Grid row;
+            winrt_ctrl::ColumnDefinition col0;
+            col0.Width(winrt_wux::GridLengthHelper::FromValueAndType(1.0, winrt_wux::GridUnitType::Star));
+            winrt_ctrl::ColumnDefinition col1;
+            col1.Width(winrt_wux::GridLengthHelper::Auto());
+            row.ColumnDefinitions().Append(col0);
+            row.ColumnDefinitions().Append(col1);
+
+            winrt_ctrl::StackPanel info;
+            info.VerticalAlignment(winrt_wux::VerticalAlignment::Center);
+
+            winrt_ctrl::TextBlock nameTxt;
+            nameTxt.Text(winrt::hstring(proc.exeName));
+            nameTxt.FontSize(11.5);
+            nameTxt.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            nameTxt.Foreground(winrt_med::SolidColorBrush(RgbColor(24, 24, 27)));
+            nameTxt.TextTrimming(winrt_wux::TextTrimming::CharacterEllipsis);
+
+            winrt_ctrl::TextBlock ramTxt;
+            wchar_t rbuf[64]{};
+            _snwprintf_s(rbuf, _TRUNCATE, L"%s%s",
+                         MemoryEngine::FormatBytes(proc.totalWorkingSetBytes).c_str(),
+                         proc.hasWindow ? L" • App Window" : L" • Background");
+            ramTxt.Text(winrt::hstring(rbuf));
+            ramTxt.FontSize(10.0);
+            ramTxt.Foreground(winrt_med::SolidColorBrush(RgbColor(113, 113, 122)));
+
+            info.Children().Append(nameTxt);
+            info.Children().Append(ramTxt);
+            winrt_ctrl::Grid::SetColumn(info, 0);
+
+            winrt_ctrl::Button addBtn;
+            addBtn.Content(winrt::box_value(L"+ Protect"));
+            addBtn.FontSize(10.5);
+            addBtn.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            addBtn.Padding(winrt_wux::ThicknessHelper::FromLengths(8.0, 3.0, 8.0, 3.0));
+            addBtn.Background(winrt_med::SolidColorBrush(RgbColor(243, 238, 255)));
+            addBtn.Foreground(winrt_med::SolidColorBrush(RgbColor(109, 40, 217)));
+            addBtn.BorderThickness(winrt_wux::ThicknessHelper::FromUniformLength(0.0));
+            addBtn.CornerRadius(winrt_wux::CornerRadiusHelper::FromUniformRadius(5.0));
+            addBtn.VerticalAlignment(winrt_wux::VerticalAlignment::Center);
+            const std::wstring exeCopy = proc.exeName;
+            winrt_wux::Automation::AutomationProperties::SetName(addBtn, winrt::hstring(L"Protect " + exeCopy));
+            addBtn.Click([this, exeCopy](auto&&, auto&&) {
+                AddProtectedGameExe(exeCopy);
+            });
+            winrt_ctrl::Grid::SetColumn(addBtn, 1);
+
+            row.Children().Append(info);
+            row.Children().Append(addBtn);
+            card.Child(row);
+            m_runningProcessesList.Children().Append(card);
+        }
+    }
+
+    UpdateGameScrollThumb();
 }
 
 void AppWindow::InitTrayIcon() {
@@ -1114,7 +1599,7 @@ void AppWindow::InitTrayIcon() {
         m_currentTrayIcon = m_trayRenderer.CreateLogoIcon(m_hInst, m_dpi);
     }
     nid.hIcon = m_currentTrayIcon ? m_currentTrayIcon : m_appIconSmall;
-    wcscpy_s(nid.szTip, L"VRam V1.0");
+    wcscpy_s(nid.szTip, L"VRam V2.0");
 
     m_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
     m_lastTrayPercent = m_lastSnapshot.usagePercent;
@@ -1132,9 +1617,9 @@ void AppWindow::UpdateTrayIcon(const MemorySnapshot& snap, bool forceIconRecreat
 
     const std::wstring usedStr  = MemoryEngine::FormatBytes(snap.usedBytes);
     const std::wstring totalStr = MemoryEngine::FormatBytes(snap.totalBytes);
-    std::swprintf(nid.szTip, ARRAYSIZE(nid.szTip),
-                  L"VRam V1.0 - RAM: %u%% (%s / %s)",
-                  snap.usagePercent, usedStr.c_str(), totalStr.c_str());
+    _snwprintf_s(nid.szTip, _TRUNCATE,
+                 L"VRam V2.0 - RAM: %u%% (%s / %s)",
+                 snap.usagePercent, usedStr.c_str(), totalStr.c_str());
 
     const bool styleChanged = (m_lastTrayStyle != m_config.trayStyle);
     const bool percentChanged = (m_config.trayStyle == L"percent" && m_lastTrayPercent != snap.usagePercent);
@@ -1169,26 +1654,14 @@ void AppWindow::RemoveTrayIcon() {
     m_trayAdded = false;
 }
 
-void AppWindow::ShowTrayBalloon(const wchar_t* title, const wchar_t* body) {
-    if (!m_trayAdded) return;
-    NOTIFYICONDATAW nid{};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = m_hwnd;
-    nid.uID = kTrayIconId;
-    nid.uFlags = NIF_INFO;
-    nid.dwInfoFlags = NIIF_INFO | NIIF_NOSOUND;
-    wcsncpy_s(nid.szInfoTitle, title, _TRUNCATE);
-    wcsncpy_s(nid.szInfo, body, _TRUNCATE);
-    Shell_NotifyIconW(NIM_MODIFY, &nid);
-}
-
 void AppWindow::ShowTrayContextMenu() {
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
     const bool visible = IsWindowVisible(m_hwnd) != FALSE;
-    AppendMenuW(hMenu, MF_STRING, IDM_TRAY_SHOW, visible ? L"Hide to Tray" : L"Show VRam");
+    AppendMenuW(hMenu, MF_STRING, IDM_TRAY_SHOW, visible ? L"Hide to Tray" : L"Show VRam V2.0");
     AppendMenuW(hMenu, MF_STRING, IDM_TRAY_PURGE, L"Purge Memory Now");
+    AppendMenuW(hMenu, MF_STRING, IDM_TRAY_GAMES, L"Game Shield");
     AppendMenuW(hMenu, MF_STRING, IDM_TRAY_SETTINGS, L"Settings");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_TRAY_EXIT, L"Exit VRam");

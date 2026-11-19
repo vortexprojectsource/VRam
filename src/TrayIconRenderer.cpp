@@ -19,8 +19,70 @@ namespace vram {
 namespace {
 
 int GetTrayIconSizePx(UINT dpi) {
-    int sm = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+    const UINT safeDpi = (dpi == 0) ? 96u : dpi;
+    int sm = GetSystemMetricsForDpi(SM_CXSMICON, safeDpi);
     return (sm > 0) ? sm : 16;
+}
+
+HICON CreateGdiUsagePercentIcon(uint32_t clamped, int sizePx, HICON(*bitmapToIconFn)(const uint8_t*, int, int)) {
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = sizePx;
+    bi.bmiHeader.biHeight = -sizePx;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    void* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, hdcScreen);
+    if (!hdcMem || !hBmp || !bits) {
+        if (hBmp) DeleteObject(hBmp);
+        if (hdcMem) DeleteDC(hdcMem);
+        return nullptr;
+    }
+
+    HGDIOBJ oldBmp = SelectObject(hdcMem, hBmp);
+    RECT rc{0, 0, sizePx, sizePx};
+    HBRUSH bgBrush = CreateSolidBrush(RGB(244, 244, 245));
+    FillRect(hdcMem, &rc, bgBrush);
+    DeleteObject(bgBrush);
+
+    HBRUSH accentBrush = CreateSolidBrush(clamped >= 90 ? RGB(220, 38, 38) : RGB(109, 40, 217));
+    const int barH = std::max(2, sizePx / 6);
+    const int barW = static_cast<int>((sizePx - 2) * (static_cast<double>(clamped) / 100.0));
+    RECT barRc{1, sizePx - barH - 1, 1 + std::max(1, barW), sizePx - 1};
+    FillRect(hdcMem, &barRc, accentBrush);
+    DeleteObject(accentBrush);
+
+    const int fontPx = (clamped >= 100) ? std::max(7, (sizePx * 45) / 100) : std::max(8, (sizePx * 56) / 100);
+    HFONT hFont = CreateFontW(-fontPx, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    HGDIOBJ oldFont = hFont ? SelectObject(hdcMem, hFont) : nullptr;
+    SetBkMode(hdcMem, TRANSPARENT);
+    SetTextColor(hdcMem, RGB(24, 24, 27));
+    wchar_t numBuf[8]{};
+    _snwprintf_s(numBuf, _TRUNCATE, L"%u", clamped);
+    RECT txtRc{0, 0, sizePx, sizePx - barH};
+    DrawTextW(hdcMem, numBuf, -1, &txtRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    if (oldFont) SelectObject(hdcMem, oldFont);
+    if (hFont) DeleteObject(hFont);
+    GdiFlush();
+
+    auto* px = static_cast<uint8_t*>(bits);
+    const size_t totalPx = static_cast<size_t>(sizePx) * sizePx;
+    for (size_t i = 0; i < totalPx; ++i) {
+        px[i * 4 + 3] = 255;
+    }
+
+    SelectObject(hdcMem, oldBmp);
+    HICON out = bitmapToIconFn(px, sizePx, sizePx);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    return out;
 }
 
 }
@@ -242,7 +304,10 @@ HICON TrayIconRenderer::RenderSvgToIcon(const std::vector<uint8_t>& svgBytes, in
 
     D2D1_MAPPED_RECT mapped{};
     hr = readBmp->Map(D2D1_MAP_OPTIONS_READ, &mapped);
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !mapped.bits || mapped.pitch < static_cast<UINT>(sizePx) * 4) {
+        if (SUCCEEDED(hr)) readBmp->Unmap();
+        return nullptr;
+    }
 
     std::vector<uint8_t> pixels(static_cast<size_t>(sizePx) * sizePx * 4);
     for (int y = 0; y < sizePx; ++y) {
@@ -276,19 +341,23 @@ HICON TrayIconRenderer::CreateUsagePercentIcon(uint32_t percent, UINT dpi) {
     const int sizePx = std::max(16, GetTrayIconSizePx(dpi));
     const uint32_t clamped = std::min<uint32_t>(percent, 100);
 
+    auto gdiFallback = [&]() -> HICON {
+        return CreateGdiUsagePercentIcon(clamped, sizePx, &TrayIconRenderer::BitmapPixelsToIcon);
+    };
+
     ComPtr<IWICImagingFactory> wicFactory;
     HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
                                   IID_PPV_ARGS(&wicFactory));
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !wicFactory) return gdiFallback();
 
     ComPtr<IWICBitmap> wicBmp;
     hr = wicFactory->CreateBitmap(sizePx, sizePx, GUID_WICPixelFormat32bppPBGRA,
                                   WICBitmapCacheOnDemand, &wicBmp);
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !wicBmp) return gdiFallback();
 
     ComPtr<ID2D1Factory> d2dFactory;
     hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, d2dFactory.GetAddressOf());
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !d2dFactory) return gdiFallback();
 
     D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
@@ -296,12 +365,12 @@ HICON TrayIconRenderer::CreateUsagePercentIcon(uint32_t percent, UINT dpi) {
     );
     ComPtr<ID2D1RenderTarget> rt;
     hr = d2dFactory->CreateWicBitmapRenderTarget(wicBmp.Get(), rtProps, &rt);
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !rt) return gdiFallback();
 
     ComPtr<IDWriteFactory> dwriteFactory;
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
                              reinterpret_cast<IUnknown**>(dwriteFactory.GetAddressOf()));
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !dwriteFactory) return gdiFallback();
 
     const float s = static_cast<float>(sizePx);
     const float fontSize = (clamped >= 100) ? (s * 0.44f) : (s * 0.56f);
@@ -310,7 +379,7 @@ HICON TrayIconRenderer::CreateUsagePercentIcon(uint32_t percent, UINT dpi) {
     hr = dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr,
                                          DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL,
                                          DWRITE_FONT_STRETCH_CONDENSED, fontSize, L"en-us", &textFmt);
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !textFmt) return gdiFallback();
 
     textFmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     textFmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -324,16 +393,18 @@ HICON TrayIconRenderer::CreateUsagePercentIcon(uint32_t percent, UINT dpi) {
     ComPtr<ID2D1SolidColorBrush> borderBrush;
     ComPtr<ID2D1SolidColorBrush> textBrush;
     ComPtr<ID2D1SolidColorBrush> accentBrush;
-    rt->CreateSolidColorBrush(D2D1::ColorF(0xF4F4F5, 1.0f), &bgBrush);
-    rt->CreateSolidColorBrush(D2D1::ColorF(0xD4D4D8, 1.0f), &borderBrush);
-    rt->CreateSolidColorBrush(D2D1::ColorF(0x18181B, 1.0f), &textBrush);
-    rt->CreateSolidColorBrush(accent, &accentBrush);
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0xF4F4F5, 1.0f), &bgBrush)) || !bgBrush ||
+        FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0xD4D4D8, 1.0f), &borderBrush)) || !borderBrush ||
+        FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0x18181B, 1.0f), &textBrush)) || !textBrush ||
+        FAILED(rt->CreateSolidColorBrush(accent, &accentBrush)) || !accentBrush) {
+        return gdiFallback();
+    }
 
     const float radius = std::max(2.0f, s * 0.18f);
     const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(D2D1::RectF(0.5f, 0.5f, s - 0.5f, s - 0.5f), radius, radius);
 
     wchar_t numBuf[8]{};
-    std::swprintf(numBuf, 8, L"%u", clamped);
+    _snwprintf_s(numBuf, _TRUNCATE, L"%u", clamped);
 
     rt->BeginDraw();
     rt->Clear(D2D1::ColorF(0, 0, 0, 0));
@@ -349,18 +420,23 @@ HICON TrayIconRenderer::CreateUsagePercentIcon(uint32_t percent, UINT dpi) {
     const D2D1_RECT_F textRect = D2D1::RectF(0.0f, -barH * 0.35f, s, s - barH);
     rt->DrawTextW(numBuf, static_cast<UINT32>(wcslen(numBuf)), textFmt.Get(), textRect, textBrush.Get());
     hr = rt->EndDraw();
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr)) return gdiFallback();
 
     ComPtr<IWICBitmapLock> lock;
     WICRect lockRect{0, 0, sizePx, sizePx};
     hr = wicBmp->Lock(&lockRect, WICBitmapLockRead, &lock);
-    if (FAILED(hr)) return nullptr;
+    if (FAILED(hr) || !lock) return gdiFallback();
 
     UINT bufSize = 0;
     UINT stride = 0;
     BYTE* ptr = nullptr;
-    lock->GetStride(&stride);
-    lock->GetDataPointer(&bufSize, &ptr);
+    if (FAILED(lock->GetStride(&stride)) ||
+        FAILED(lock->GetDataPointer(&bufSize, &ptr)) ||
+        !ptr ||
+        stride < static_cast<UINT>(sizePx) * 4 ||
+        bufSize < stride * static_cast<UINT>(sizePx)) {
+        return gdiFallback();
+    }
 
     std::vector<uint8_t> pixels(static_cast<size_t>(sizePx) * sizePx * 4);
     for (int y = 0; y < sizePx; ++y) {
