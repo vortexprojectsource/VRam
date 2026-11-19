@@ -2,13 +2,12 @@
 #include "resource.h"
 
 IDI_VRAM_APP    ICON    "../assets/vram.ico"
-IDR_XAML_LAYOUT RCDATA  "ui/AppLayout.xaml"
 IDR_SVG_LOGO    RCDATA  "../assets/icons/logo.svg"
 IDR_PNG_LOGO    RCDATA  "../assets/logo_ui.png"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     2,0,0,0
-PRODUCTVERSION  2,0,0,0
+FILEVERSION     2,1,0,0
+PRODUCTVERSION  2,1,0,0
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 FILEFLAGS       0x0L
 FILEOS          VOS_NT_WINDOWS32
@@ -20,13 +19,13 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName",      "Vortex Open Source Project"
-            VALUE "FileDescription",  "VRam V2.0 - Memory Cleaner & Game Shield"
-            VALUE "FileVersion",      "2.0.0.0"
+            VALUE "FileDescription",  "VRam V2.1 - Memory Cleaner & Game Shield"
+            VALUE "FileVersion",      "2.1.0.0"
             VALUE "InternalName",     "VRam.exe"
             VALUE "LegalCopyright",   "Vortex Open Source Project"
             VALUE "OriginalFilename", "VRam.exe"
-            VALUE "ProductName",      "VRam V2.0"
-            VALUE "ProductVersion",   "2.0"
+            VALUE "ProductName",      "VRam V2.1"
+            VALUE "ProductVersion",   "2.1"
         END
     END
     BLOCK "VarFileInfo"

@@ -1,5 +1,6 @@
 #include "PurgeToastWindow.hpp"
 #include "TrayIconRenderer.hpp"
+#include "Win32Compat.hpp"
 
 #include <d2d1.h>
 #include <dwrite.h>
@@ -22,7 +23,7 @@ constexpr wchar_t kToastClassName[] = L"VRam_V2_PurgeToastWindow";
 constexpr float kPi = 3.14159265358979323846f;
 
 int ScalePx(int dip, UINT dpi) {
-    return MulDiv(dip, static_cast<int>(dpi == 0 ? 96u : dpi), 96);
+    return compat::ScaleDip(dip, dpi);
 }
 
 }
@@ -30,57 +31,7 @@ int ScalePx(int dip, UINT dpi) {
 void PurgeToastWindow::LoadCachedLogoPixels() {
     if (!m_hInstance || !m_logoPbgra.empty()) return;
     auto pngBytes = TrayIconRenderer::LoadLogoPngBytes(m_hInstance);
-    if (pngBytes.empty()) return;
-
-    ComPtr<IWICImagingFactory> wicFactory;
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&wicFactory))) || !wicFactory) {
-        return;
-    }
-
-    ComPtr<IStream> stream;
-    stream.Attach(SHCreateMemStream(pngBytes.data(), static_cast<UINT>(pngBytes.size())));
-    if (!stream) return;
-
-    ComPtr<IWICBitmapDecoder> decoder;
-    if (FAILED(wicFactory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder)) || !decoder) {
-        return;
-    }
-
-    ComPtr<IWICBitmapFrameDecode> frame;
-    if (FAILED(decoder->GetFrame(0, &frame)) || !frame) return;
-
-    UINT w = 0, h = 0;
-    if (FAILED(frame->GetSize(&w, &h)) || w == 0 || h == 0) return;
-
-    const UINT targetH = 36;
-    const UINT targetW = std::max<UINT>(1, static_cast<UINT>(std::lround(static_cast<double>(w) * targetH / static_cast<double>(h))));
-
-    ComPtr<IWICBitmapSource> scaledSource = frame;
-    ComPtr<IWICBitmapScaler> scaler;
-    if (SUCCEEDED(wicFactory->CreateBitmapScaler(&scaler)) && scaler &&
-        SUCCEEDED(scaler->Initialize(frame.Get(), targetW, targetH, WICBitmapInterpolationModeFant))) {
-        scaledSource = scaler;
-        w = targetW;
-        h = targetH;
-    }
-
-    ComPtr<IWICFormatConverter> converter;
-    if (FAILED(wicFactory->CreateFormatConverter(&converter)) || !converter) return;
-    if (FAILED(converter->Initialize(scaledSource.Get(), GUID_WICPixelFormat32bppPBGRA,
-                                     WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom))) {
-        return;
-    }
-
-    const UINT stride = w * 4;
-    std::vector<uint8_t> buf(static_cast<size_t>(stride) * h);
-    if (FAILED(converter->CopyPixels(nullptr, stride, static_cast<UINT>(buf.size()), buf.data()))) {
-        return;
-    }
-
-    m_logoW = w;
-    m_logoH = h;
-    m_logoPbgra = std::move(buf);
+    compat::DecodePngToPbgra(pngBytes, 36, m_logoW, m_logoH, m_logoPbgra);
 }
 
 PurgeToastWindow::~PurgeToastWindow() {
@@ -108,7 +59,7 @@ bool PurgeToastWindow::Create(HINSTANCE hInstance, HWND ownerNotifyHwnd, UINT op
     m_hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kToastClassName,
-        L"VRam V2.0 Notification",
+        L"VRam V2.1 Notification",
         WS_POPUP,
         0, 0,
         ScalePx(kBaseWidthDip, 96), ScalePx(kBaseHeightDip, 96),
@@ -122,7 +73,7 @@ bool PurgeToastWindow::Create(HINSTANCE hInstance, HWND ownerNotifyHwnd, UINT op
         return false;
     }
 
-    m_dpi = GetDpiForWindow(m_hwnd);
+    m_dpi = compat::GetDpiForWindowCompat(m_hwnd);
     if (m_dpi == 0) {
         m_dpi = 96;
     }
@@ -206,7 +157,7 @@ void PurgeToastWindow::PositionBottomRight() {
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
     }
 
-    const UINT curDpi = GetDpiForWindow(m_hwnd);
+    const UINT curDpi = compat::GetDpiForWindowCompat(m_hwnd);
     if (curDpi > 0) {
         m_dpi = curDpi;
     }

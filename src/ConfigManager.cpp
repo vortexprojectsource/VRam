@@ -227,7 +227,7 @@ bool ConfigManager::Save(const AppConfig& cfg) {
 
     writer->WriteStartDocument(XmlStandalone_Omit);
     writer->WriteStartElement(nullptr, L"VRamConfig", nullptr);
-    writer->WriteAttributeString(nullptr, L"version", nullptr, L"2.0");
+    writer->WriteAttributeString(nullptr, L"version", nullptr, L"2.1");
 
     writer->WriteStartElement(nullptr, L"Startup", nullptr);
     writer->WriteAttributeString(nullptr, L"autoStart", nullptr, bstr(cfg.autoStart));

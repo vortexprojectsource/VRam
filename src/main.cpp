@@ -5,10 +5,9 @@
 #endif
 #include <windows.h>
 #include <commctrl.h>
+#include <objbase.h>
 
-#include <winrt/base.h>
-
-#include <cstring>
+#include <cstdio>
 #include <exception>
 #include <string>
 
@@ -22,10 +21,9 @@ bool HasCommandLineFlag(const wchar_t* cmdLine, const wchar_t* flag) {
 std::wstring FormatStartupError(const wchar_t* reason, HRESULT hr) {
     wchar_t buf[512]{};
     _snwprintf_s(buf, _TRUNCATE,
-                 L"VRam V2.0 failed to initialize required Windows UI components.\n\n"
+                 L"VRam V2.1 failed to initialize required Windows components.\n\n"
                  L"Detail: %s (HRESULT 0x%08X)\n\n"
-                 L"Ensure you are running Windows 10 version 1903 (build 18362) or Windows 11, "
-                 L"and retry or run as Administrator.",
+                 L"Try running VRam as Administrator.",
                  reason ? reason : L"Unknown initialization failure",
                  static_cast<unsigned int>(hr));
     return buf;
@@ -49,18 +47,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int) {
     icc.dwICC = ICC_WIN95_CLASSES;
     InitCommonControlsEx(&icc);
 
-    bool comInitialized = false;
-    try {
-        winrt::init_apartment(winrt::apartment_type::single_threaded);
-        comInitialized = true;
-    } catch (const winrt::hresult_error& err) {
-        const std::wstring msg = FormatStartupError(err.message().c_str(), err.code());
-        MessageBoxW(nullptr, msg.c_str(), L"VRam V2.0 - Startup Error", MB_OK | MB_ICONERROR);
-        if (hMutex) CloseHandle(hMutex);
-        return 1;
-    } catch (...) {
-        const std::wstring msg = FormatStartupError(L"COM/WinRT STA initialization failed", E_FAIL);
-        MessageBoxW(nullptr, msg.c_str(), L"VRam V2.0 - Startup Error", MB_OK | MB_ICONERROR);
+    const HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    const bool comInitialized = SUCCEEDED(hrCom);
+    if (FAILED(hrCom) && hrCom != RPC_E_CHANGED_MODE) {
+        const std::wstring msg = FormatStartupError(L"COM apartment initialization failed", hrCom);
+        MessageBoxW(nullptr, msg.c_str(), L"VRam V2.1 - Startup Error", MB_OK | MB_ICONERROR);
         if (hMutex) CloseHandle(hMutex);
         return 1;
     }
@@ -71,8 +62,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int) {
     try {
         vram::AppWindow app(hInstance, startMinimized);
         if (!app.Create()) {
+            MessageBoxW(nullptr,
+                        L"VRam V2.1 could not create its main window.",
+                        L"VRam V2.1 - Startup Error", MB_OK | MB_ICONERROR);
             if (hMutex) CloseHandle(hMutex);
-            if (comInitialized) winrt::uninit_apartment();
+            if (comInitialized) CoUninitialize();
             return 1;
         }
 
@@ -85,24 +79,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int) {
             DispatchMessageW(&msg);
         }
         exitCode = static_cast<int>(msg.wParam);
-    } catch (const winrt::hresult_error& err) {
-        const std::wstring msg = FormatStartupError(err.message().c_str(), err.code());
-        MessageBoxW(nullptr, msg.c_str(), L"VRam V2.0 - Runtime Error", MB_OK | MB_ICONERROR);
-        exitCode = 1;
     } catch (const std::exception& ex) {
         wchar_t wbuf[256]{};
         MultiByteToWideChar(CP_UTF8, 0, ex.what(), -1, wbuf, 256);
         const std::wstring msg = FormatStartupError(wbuf, E_FAIL);
-        MessageBoxW(nullptr, msg.c_str(), L"VRam V2.0 - Runtime Error", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, msg.c_str(), L"VRam V2.1 - Runtime Error", MB_OK | MB_ICONERROR);
         exitCode = 1;
     } catch (...) {
-        MessageBoxW(nullptr, L"Unexpected unhandled exception in VRam V2.0.",
-                    L"VRam V2.0 - Runtime Error", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, L"Unexpected unhandled exception in VRam V2.1.",
+                    L"VRam V2.1 - Runtime Error", MB_OK | MB_ICONERROR);
         exitCode = 1;
     }
 
     if (comInitialized) {
-        winrt::uninit_apartment();
+        CoUninitialize();
     }
     if (hMutex) {
         ReleaseMutex(hMutex);

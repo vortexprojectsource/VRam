@@ -1,11 +1,11 @@
-# VRam V2.0 — Windows Native Memory Cleaner & Game Shield
+# VRam V2.1 — Windows Native Memory Cleaner & Game Shield
 
-**VRam V2.0** is an open-source, standalone native memory cleaner and game RAM shield for **Windows 10** (1903+ / build 18362+) and **Windows 11**, written in **C++20**, **Win32**, **Direct2D/DirectWrite**, and **XAML Islands** (`DesktopWindowXamlSource`). It statically links the MSVC runtime (`/MT`) so it runs out of the box on clean Windows machines without requiring any VC++ Redistributable, WebView2, Electron, or external frameworks.
+**VRam V2.1** is an open-source, standalone native memory cleaner and game RAM shield for **Windows 10 / 11** (all builds, including LTSC & stripped installations) and legacy Windows environments, written in **C++20**, **Win32**, and pure **Direct2D / DirectWrite**. It statically links the MSVC runtime (`/MT`) with zero XAML Islands, WinRT, UWP, or WebView2 runtime dependencies so it launches reliably everywhere out of the box.
 
 > [!NOTE]
 > **Project Identity**
-> - **Product Name:** `VRam V2.0`
-> - **File Description:** `VRam V2.0 - Memory Cleaner & Game Shield`
+> - **Product Name:** `VRam V2.1`
+> - **File Description:** `VRam V2.1 - Memory Cleaner & Game Shield`
 > - **Copyright:** `Vortex Open Source Project`
 > - **Created by:** `@vinnotdkk`
 > - **Repository:** https://github.com/vortexprojectsource/VRam
@@ -14,7 +14,7 @@
 
 ## Table of Contents
 
-1. [What's New in V2.0](#whats-new-in-v20)
+1. [What's New in V2.1](#whats-new-in-v21)
 2. [Architecture Overview](#architecture-overview)
 3. [Technical Stack & Linked Libraries](#technical-stack--linked-libraries)
 4. [Memory Purge Pipeline & Game Shield](#memory-purge-pipeline--game-shield)
@@ -29,15 +29,13 @@
 
 ---
 
-## What's New in V2.0
+## What's New in V2.1
 
-- **Zero-Redist Portable Binary (`/MT` Static CRT):** Statically links MSVC runtime libraries (`MultiThreaded`), eliminating `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, and `MSVCP140.dll` missing-DLL startup failures on fresh PCs.
-- **Cross-Device Stability & Crash Hardening:**
-  - Top-level WinRT/COM and `OnCreate()` XAML Island exception catching with clear diagnostic `MessageBoxW` reporting instead of silent termination on stripped or legacy Windows builds.
-  - Safe `.try_as<T>()` control binding, `m_dpi` zero-guards, `_snwprintf_s(..., _TRUNCATE)` bounded string formatting, WIC `Lock` / D2D brush `HRESULT` validation, and a pure-GDI fallback renderer for `%` tray icons.
-  - Protected core Windows process exclusion list (`csrss.exe`, `smss.exe`, `wininit.exe`, `services.exe`, `lsass.exe`, `dwm.exe`, `audiodg.exe`, `svchost.exe`, `Memory Compression`, etc.) during elevated working-set sweeps.
-- **Floating Purge Toast Notification (`PurgeToastWindow`):** Compact non-activating layered `HWND_TOPMOST` toast (`356 x 118` DIP) in VRam's white-purple-black theme (`Direct2D` + `DirectWrite` + `UpdateLayeredWindow`). Shows the embedded VR logo and a spinning violet ring while purging, transitions to a purple check badge with freed RAM and protected game metrics when complete, and auto-fades out via a slim bottom countdown bar after ~3 seconds.
-- **Game Shield (Select, Exclude & Maximize Game RAM):** Select any game `.exe` (via file browser or one-click picker from live running apps) so it is bypassed during memory purges while receiving elevated process/memory/I/O prioritization and soft working-set expansion headroom.
+- **Pure Native Direct2D + DirectWrite UI (XAML Islands Removed):** Replaces WinRT `WindowsXamlManager` / `DesktopWindowXamlSource` with a hardware-accelerated Direct2D/DirectWrite UI engine matching the white-purple-black `368 x 524` DIP layout cleanly.
+- **Universal Cross-Device Compatibility (`0x8000FFFF` / `MaxTestedVersion` Fixed Permanently):** Runs on Windows 10 (all builds including `< 1903` & LTSC 2019), Windows 11, stripped custom gaming OS builds, and Windows Compatibility Mode without requiring Store/UWP XAML framework packages.
+- **Dynamic DPI Compatibility Layer (`Win32Compat`):** Resolves `GetDpiForWindow`, `GetDpiForSystem`, and `GetSystemMetricsForDpi` dynamically with GDI fallbacks so older builds never hit missing DLL entry-point errors.
+- **Zero-Redist Portable Binary (`/MT` Static CRT) & Lighter RAM Footprint:** Eliminates WinRT/XAML runtime overhead and statically links MSVC runtime libraries (`MultiThreaded`).
+- **Floating Purge Toast Notification (`PurgeToastWindow`) & Game Shield:** Real-time layered bottom-right purge toast notification and process-level **Game Shield** protection + RAM prioritization carried forward seamlessly from V2.0.
 
 ---
 
@@ -50,15 +48,15 @@ VRam separates native Windows system integration from its UI layer so memory ope
 |                         wWinMain (src/main.cpp)                       |
 |  - Enforces single instance via Local\VRam_V2_SingleInstance_Mutex    |
 |  - Parses --minimized / --elevated-restart startup flags              |
-|  - Initializes STA WinRT cleanly & catches unhandled startup errors   |
+|  - Initializes COM STA cleanly & catches unhandled startup errors     |
 +-----------------------------------+-----------------------------------+
                                     |
           +-------------------------+-------------------------+
           v                                                   v
 +-----------------------------+               +-----------------------------+
-|   AppWindow (Win32 + XAML)  |               |  MemoryEngine (Background)  |
+|  AppWindow (Win32 + D2D)    |               |  MemoryEngine (Background)  |
 | - Frameless 368x524 DIP UI  |               | - GlobalMemoryStatusEx()    |
-| - Main / Game Shield /Cfg   |  Worker Req   | - GetPerformanceInfo()      |
+| - Pure Direct2D + DWrite    |  Worker Req   | - GetPerformanceInfo()      |
 | - WS_EX_LAYERED alpha fade  | ------------> | - NtSetSystemInformation()  |
 | - 2000ms telemetry polling  | <------------ | - SetSystemFileCacheSize()  |
 | - Auto-Purge & Toast host   |  PurgeResult  | - Game Shield prioritization|
@@ -84,7 +82,7 @@ Every component in VRam relies directly on APIs built into Windows 10 and Window
 | :--- | :--- | :--- |
 | **Language & Runtime** | **C++20** (`/W4 /EHsc /permissive- /utf-8`, `/MT` static CRT) | Self-contained x64 binary (`CMakeLists.txt`) |
 | **Window Host & DPI** | **Win32 (`HWND`)** + `PerMonitorV2` manifest (`resources/app.manifest`) | Frameless windowing, custom fade transitions (`WS_EX_LAYERED`), sharp DPI scaling |
-| **UI Rendering** | **XAML Islands** (`DesktopWindowXamlSource`, `RequestedTheme="Light"`) | Hardware-accelerated vector UI defined in `resources/ui/AppLayout.xaml` |
+| **UI Rendering** | **Direct2D (`d2d1`)**, **DirectWrite (`dwrite`)**, **WIC** | Hardware-accelerated `368 x 524` DIP UI, smooth animations, vector SVG paths (`VectorIcons`) |
 | **2D / Toast Graphics** | **Direct2D (`d2d1`)**, **DirectWrite (`dwrite`)**, **Direct3D 11 (`d3d11`)**, **WIC** | Floating layered purge notification card, dynamic RAM % tray badges, SVG/PNG icons |
 | **Memory & Process APIs** | `GlobalMemoryStatusEx`, `GetPerformanceInfo`, `psapi`, `tlhelp32` | Live physical RAM metrics, app enumeration, and Game Shield inspection |
 | **Kernel & Boost APIs** | `NtSetSystemInformation`, `NtSetInformationProcess`, `SetProcessInformation` | Memory list purging, EcoQoS off, Memory Priority Normal, I/O & soft working-set headroom |
@@ -144,17 +142,17 @@ Open **Settings -> Elevate** at any time to relaunch elevated via `ShellExecuteE
 - **Two System Tray Icon Styles:**
   - **`Icon` (`logo`):** Crisp brand icon (`assets/vram.ico` or external `logo.svg`).
   - **`RAM %` (`percent`):** Live percentage badge via **Direct2D + DirectWrite** (with automatic pure-GDI fallback renderer).
-- **Tray Context Menu:** Right-click the tray icon for **`Hide to Tray` / `Show VRam V2.0`**, **`Purge Memory Now`**, **`Game Shield`**, **`Settings`**, and **`Exit VRam`**.
+- **Tray Context Menu:** Right-click the tray icon for **`Hide to Tray` / `Show VRam V2.1`**, **`Purge Memory Now`**, **`Game Shield`**, **`Settings`**, and **`Exit VRam`**.
 
 ---
 
 ## Configuration & Persistence (`config.xml`)
 
-Settings are stored natively via **`xmllite.dll`** at `%APPDATA%\VRam\config.xml` (existing V1.0 configs migrate automatically):
+Settings are stored natively via **`xmllite.dll`** at `%APPDATA%\VRam\config.xml` (existing V1.0 / V2.0 configs migrate automatically):
 
 ```xml
 <?xml version="1.0"?>
-<VRamConfig version="2.0">
+<VRamConfig version="2.1">
   <Startup autoStart="false" startMinimized="false" />
   <Window minimizeToTray="true" closeToTray="true" alwaysOnTop="false" trayStyle="logo" />
   <Purge workingSets="true" systemCache="true" standbyList="true" modifiedList="true" />
@@ -215,13 +213,15 @@ VRam/
 │   ├── logo.png / logo_ui.png        # High-res & tight-cropped VR logos
 │   └── vram.ico                      # Multi-resolution Windows icon (16..256 px)
 ├── resources/
-│   ├── ui/AppLayout.xaml             # XAML Islands UI layout (Main, Game Shield, Settings)
-│   ├── app.manifest                  # PerMonitorV2 DPI, XAML compatibility & asInvoker manifest
+│   ├── ui/AppLayout.xaml             # Reference UI layout spec (rendered natively via Direct2D)
+│   ├── app.manifest                  # PerMonitorV2 DPI, Win7-11 OS support & asInvoker manifest
 │   ├── resource.h                    # Win32 resource IDs
-│   └── VRam.rc                       # Embedded resources & V2.0 PE VersionInfo metadata
+│   └── VRam.rc                       # Embedded resources & V2.1 PE VersionInfo metadata
 ├── src/
 │   ├── main.cpp                      # wWinMain, single-instance mutex & exception guards
-│   ├── AppWindow.hpp / .cpp          # Win32 host window, XAML bindings, Game Shield & polling
+│   ├── AppWindow.hpp / .cpp          # Win32 host window, Direct2D/DWrite UI, Game Shield & polling
+│   ├── VectorIcons.hpp / .cpp        # Cached SVG path -> Direct2D geometry renderer
+│   ├── Win32Compat.hpp               # Dynamic DPI helpers & shared WIC PNG decoder
 │   ├── MemoryEngine.hpp / .cpp       # RAM telemetry, 6-stage purge & Game Shield prioritization
 │   ├── PurgeToastWindow.hpp / .cpp   # Layered white-purple-black purge toast notification
 │   ├── ConfigManager.hpp / .cpp      # xmllite XML config I/O & HKCU startup entry

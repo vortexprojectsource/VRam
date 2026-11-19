@@ -1,4 +1,18 @@
+#ifdef WINVER
+#undef WINVER
+#endif
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#endif
+#ifdef NTDDI_VERSION
+#undef NTDDI_VERSION
+#endif
+#define WINVER 0x0A00
+#define _WIN32_WINNT 0x0A00
+#define NTDDI_VERSION 0x0A000004
+
 #include "TrayIconRenderer.hpp"
+#include "Win32Compat.hpp"
 #include "../resources/resource.h"
 
 #include <commctrl.h>
@@ -19,9 +33,7 @@ namespace vram {
 namespace {
 
 int GetTrayIconSizePx(UINT dpi) {
-    const UINT safeDpi = (dpi == 0) ? 96u : dpi;
-    int sm = GetSystemMetricsForDpi(SM_CXSMICON, safeDpi);
-    return (sm > 0) ? sm : 16;
+    return compat::GetSystemMetricsForDpiCompat(SM_CXSMICON, dpi);
 }
 
 HICON CreateGdiUsagePercentIcon(uint32_t clamped, int sizePx, HICON(*bitmapToIconFn)(const uint8_t*, int, int)) {

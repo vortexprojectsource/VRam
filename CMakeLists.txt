@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(VRam VERSION 2.0.0 LANGUAGES CXX RC)
+project(VRam VERSION 2.1.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,9 @@ add_executable(VRam WIN32
     src/main.cpp
     src/AppWindow.cpp
     src/AppWindow.hpp
+    src/VectorIcons.cpp
+    src/VectorIcons.hpp
+    src/Win32Compat.hpp
     src/MemoryEngine.cpp
     src/MemoryEngine.hpp
     src/ConfigManager.cpp
@@ -23,7 +26,7 @@ add_executable(VRam WIN32
 )
 
 set_source_files_properties(resources/VRam.rc PROPERTIES
-    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/AppLayout.xaml;${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/logo.svg;${CMAKE_CURRENT_SOURCE_DIR}/assets/logo_ui.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/vram.ico"
+    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/logo.svg;${CMAKE_CURRENT_SOURCE_DIR}/assets/logo_ui.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/vram.ico"
 )
 
 target_include_directories(VRam PRIVATE
@@ -36,8 +39,8 @@ target_compile_definitions(VRam PRIVATE
     _UNICODE
     NOMINMAX
     WIN32_LEAN_AND_MEAN
-    WINVER=0x0A00
-    _WIN32_WINNT=0x0A00
+    WINVER=0x0601
+    _WIN32_WINNT=0x0601
 )
 
 if(MSVC)
@@ -54,7 +57,6 @@ if(MSVC)
 endif()
 
 target_link_libraries(VRam PRIVATE
-    windowsapp
     user32
     gdi32
     shell32
